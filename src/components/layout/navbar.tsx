@@ -3,20 +3,21 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sparkles, Terminal, FileText, LayoutDashboard, PlayCircle } from "lucide-react";
+import { Sparkles, Menu, X, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-const NAV_ITEMS = [
-  { href: "/", label: "Overview", icon: Sparkles },
-  { href: "/setup", label: "Candidate Setup", icon: Terminal },
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/interview/demo-session", label: "Live Interview", icon: PlayCircle },
-  { href: "/report/demo-session", label: "Report", icon: FileText },
-];
-
 export function Navbar() {
   const pathname = usePathname();
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+
+  const navLinks = [
+    { href: "/#features", label: "Features" },
+    { href: "/#how-it-works", label: "How It Works" },
+    { href: "/#about", label: "About" },
+    { href: "/dashboard", label: "Dashboard" },
+  ];
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-[#1e2d4f] bg-[#0c1222]/90 backdrop-blur-md">
@@ -37,37 +38,93 @@ export function Navbar() {
             </div>
           </Link>
           <div className="hidden sm:block ml-2">
-            <Badge variant="indigo">Foundation v0.1</Badge>
+            <Badge variant="indigo">Hackathon Demo</Badge>
           </div>
         </div>
 
-        {/* Navigation links */}
-        <nav className="flex items-center gap-1 sm:gap-2">
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const isActive =
-              item.href === "/"
-                ? pathname === "/"
-                : pathname.startsWith(item.href.replace("/demo-session", ""));
+        {/* Desktop Navigation Links */}
+        <nav className="hidden md:flex items-center gap-6">
+          {navLinks.map((item) => {
+            const isDashboard = item.href === "/dashboard";
+            const isActive = isDashboard ? pathname.startsWith("/dashboard") : false;
 
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs sm:text-sm font-medium transition-colors",
-                  isActive
-                    ? "bg-[#162244] text-indigo-300 border border-indigo-700/50"
-                    : "text-slate-300 hover:bg-[#141e34] hover:text-slate-100"
+                  "text-sm font-medium transition-colors hover:text-indigo-300",
+                  isActive ? "text-indigo-400 font-semibold" : "text-slate-300"
                 )}
               >
-                <Icon className="h-3.5 w-3.5" />
-                <span className="hidden md:inline">{item.label}</span>
+                {item.label}
               </Link>
             );
           })}
         </nav>
+
+        {/* Right Action buttons */}
+        <div className="hidden sm:flex items-center gap-3">
+          <Link href="/dashboard">
+            <Button variant="ghost" size="sm" className="text-slate-300">
+              Demo Portal
+            </Button>
+          </Link>
+          <Link href="/setup">
+            <Button size="sm" className="gap-2 shadow-sm">
+              Start Your Interview
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          </Link>
+        </div>
+
+        {/* Mobile Hamburger Button */}
+        <div className="flex items-center md:hidden gap-2">
+          <Link href="/setup">
+            <Button size="sm" className="text-xs px-2.5 h-8">
+              Start
+            </Button>
+          </Link>
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Toggle Navigation Menu"
+            className="rounded-lg p-2 text-slate-300 hover:bg-[#162244] focus:outline-none"
+          >
+            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+        </div>
       </div>
+
+      {/* Mobile Navigation Dropdown */}
+      {mobileMenuOpen && (
+        <div className="md:hidden border-b border-[#1e2d4f] bg-[#0c1222] px-4 py-4 space-y-3">
+          <div className="flex flex-col space-y-2">
+            {navLinks.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMobileMenuOpen(false)}
+                className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-[#141e34] hover:text-white transition-colors"
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+          <div className="pt-2 border-t border-[#1e2d4f] flex flex-col gap-2">
+            <Link href="/setup" onClick={() => setMobileMenuOpen(false)}>
+              <Button className="w-full gap-2 justify-center">
+                Start Your Interview
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </Link>
+            <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)}>
+              <Button variant="secondary" className="w-full justify-center">
+                Candidate Dashboard
+              </Button>
+            </Link>
+          </div>
+        </div>
+      )}
     </header>
   );
 }
