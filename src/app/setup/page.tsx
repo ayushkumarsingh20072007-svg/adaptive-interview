@@ -30,42 +30,36 @@ import { saveStoredSetup, getStoredSetup } from "@/lib/storage";
 export default function CandidateSetupPage() {
   const router = useRouter();
 
-  // Initialize state directly from stored data without cascading renders
-  const [candidateName, setCandidateName] = React.useState<string>(() => {
-    return getStoredSetup()?.candidateName || "";
-  });
-
-  const [targetRole, setTargetRole] = React.useState<TargetRole>(() => {
-    return getStoredSetup()?.targetRole || "fullstack";
-  });
-
-  const [experienceLevel, setExperienceLevel] = React.useState<ExperienceLevel>(() => {
-    return getStoredSetup()?.experienceLevel || "intermediate";
-  });
-
-  const [interviewFocus, setInterviewFocus] = React.useState<InterviewFocus>(() => {
-    return getStoredSetup()?.interviewFocus || "mixed";
-  });
-
-  const [interviewLength, setInterviewLength] = React.useState<number>(() => {
-    return getStoredSetup()?.interviewLength || 20;
-  });
-
+  // Initialize state with static defaults for SSR, hydrate in useEffect
+  const [candidateName, setCandidateName] = React.useState<string>("");
+  const [targetRole, setTargetRole] = React.useState<TargetRole>("fullstack");
+  const [experienceLevel, setExperienceLevel] = React.useState<ExperienceLevel>("intermediate");
+  const [interviewFocus, setInterviewFocus] = React.useState<InterviewFocus>("mixed");
+  const [interviewLength, setInterviewLength] = React.useState<number>(20);
   const [resumeFile, setResumeFile] = React.useState<{
     name: string;
     size: string;
     isSample: boolean;
-  } | null>(() => {
+  } | null>(null);
+
+  React.useEffect(() => {
     const existing = getStoredSetup();
-    if (existing?.resumeFileName) {
-      return {
-        name: existing.resumeFileName,
-        size: existing.resumeFileSize || "2.4 MB",
-        isSample: existing.isSampleResume ?? false,
-      };
-    }
-    return null;
-  });
+    if (!existing) return;
+    requestAnimationFrame(() => {
+      if (existing.candidateName) setCandidateName(existing.candidateName);
+      if (existing.targetRole) setTargetRole(existing.targetRole);
+      if (existing.experienceLevel) setExperienceLevel(existing.experienceLevel);
+      if (existing.interviewFocus) setInterviewFocus(existing.interviewFocus);
+      if (existing.interviewLength) setInterviewLength(existing.interviewLength);
+      if (existing.resumeFileName) {
+        setResumeFile({
+          name: existing.resumeFileName,
+          size: existing.resumeFileSize || "2.4 MB",
+          isSample: existing.isSampleResume ?? false,
+        });
+      }
+    });
+  }, []);
 
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = React.useState(false);

@@ -27,19 +27,23 @@ import { CandidateSetup, EvaluationReport } from "@/lib/types";
 import { ROLE_LABELS, SAMPLE_CANDIDATE, SAMPLE_REPORT } from "@/lib/mock-data";
 import { getStoredSetup, getAllReports } from "@/lib/storage";
 import { initializeInterviewSession } from "@/lib/interview-engine";
+import { useIsMounted } from "@/lib/use-mounted";
 
 export default function DashboardPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = React.useState<"overview" | "history" | "skills" | "settings">("overview");
 
-  // Initialize state directly from storage
-  const [setup] = React.useState<CandidateSetup>(() => {
-    return getStoredSetup() || SAMPLE_CANDIDATE;
-  });
+  const isMounted = useIsMounted();
 
-  const [reports] = React.useState<EvaluationReport[]>(() => {
+  const setup: CandidateSetup = React.useMemo(() => {
+    if (!isMounted) return SAMPLE_CANDIDATE;
+    return getStoredSetup() || SAMPLE_CANDIDATE;
+  }, [isMounted]);
+
+  const reports: EvaluationReport[] = React.useMemo(() => {
+    if (!isMounted) return [SAMPLE_REPORT];
     return getAllReports() || [SAMPLE_REPORT];
-  });
+  }, [isMounted]);
 
   const [isStarting, setIsStarting] = React.useState(false);
 
