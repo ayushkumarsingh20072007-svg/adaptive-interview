@@ -6,6 +6,9 @@ export interface StoredUser {
   id: string;
   name: string;
   email: string;
+  role: "candidate" | "recruiter";
+  companyName?: string;
+  title?: string;
   passwordHash: string;
   passwordSalt: string;
   createdAt: string;
@@ -15,6 +18,9 @@ export interface SafeUser {
   id: string;
   name: string;
   email: string;
+  role: "candidate" | "recruiter";
+  companyName?: string;
+  title?: string;
   createdAt: string;
 }
 
@@ -34,9 +40,79 @@ const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "auth-store.json");
 const STORE_TMP = STORE_PATH + ".tmp";
 
+// Cryptographic helpers
+export function hashPassword(password: string, salt: string): string {
+  return crypto
+    .pbkdf2Sync(password, salt, 100000, 64, "sha512")
+    .toString("hex");
+}
+
+export function generateSalt(): string {
+  return crypto.randomBytes(16).toString("hex");
+}
+
+export function generateToken(): string {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+const DEMO_SALT = "demo_salt_interviewiq_2026";
+
+export const DEMO_USERS: StoredUser[] = [
+  {
+    id: "usr_demo_recruiter",
+    name: "Sarah Jenkins",
+    email: "recruiter@interviewiq.ai",
+    role: "recruiter",
+    companyName: "TechCorp Global",
+    title: "Head of Technical Talent",
+    passwordSalt: DEMO_SALT,
+    passwordHash: hashPassword("Password123", DEMO_SALT),
+    createdAt: "2026-10-01T00:00:00.000Z",
+  },
+  {
+    id: "usr_demo_alex",
+    name: "Alex Rivera",
+    email: "alex.rivera@example.com",
+    role: "candidate",
+    title: "Full Stack Developer",
+    passwordSalt: DEMO_SALT,
+    passwordHash: hashPassword("Password123", DEMO_SALT),
+    createdAt: "2026-10-02T00:00:00.000Z",
+  },
+  {
+    id: "usr_demo_priya",
+    name: "Priya Sharma",
+    email: "priya.sharma@example.com",
+    role: "candidate",
+    title: "Frontend Engineer",
+    passwordSalt: DEMO_SALT,
+    passwordHash: hashPassword("Password123", DEMO_SALT),
+    createdAt: "2026-10-03T00:00:00.000Z",
+  },
+  {
+    id: "usr_demo_marcus",
+    name: "Marcus Chen",
+    email: "marcus.chen@example.com",
+    role: "candidate",
+    title: "Backend Engineer",
+    passwordSalt: DEMO_SALT,
+    passwordHash: hashPassword("Password123", DEMO_SALT),
+    createdAt: "2026-10-04T00:00:00.000Z",
+  },
+  {
+    id: "usr_demo_rohan",
+    name: "Rohan Gupta",
+    email: "rohan.gupta@example.com",
+    role: "candidate",
+    title: "Python Developer",
+    passwordSalt: DEMO_SALT,
+    passwordHash: hashPassword("Password123", DEMO_SALT),
+    createdAt: "2026-10-05T00:00:00.000Z",
+  },
+];
+
 // In-process write lock — prevents concurrent read-modify-write races within
-// a single Node.js server process. This is sufficient for single-instance
-// localhost use. For multi-instance deployments a proper database is required.
+// a single Node.js server process.
 let _writeLocked = false;
 const _writeQueue: Array<() => void> = [];
 
@@ -60,26 +136,52 @@ function releaseLock(): void {
   }
 }
 
+function ensureDemoUsers(db: AuthDatabase): boolean {
+  let changed = false;
+  for (const demo of DEMO_USERS) {
+    const existingIndex = db.users.findIndex(
+      (u) => u.id === demo.id || u.email.toLowerCase() === demo.email.toLowerCase()
+    );
+    if (existingIndex === -1) {
+      db.users.push(demo);
+      changed = true;
+    } else {
+      // Ensure role, name, title are present
+      if (!db.users[existingIndex].role || db.users[existingIndex].role !== demo.role) {
+        db.users[existingIndex].role = demo.role;
+        db.users[existingIndex].title = demo.title;
+        db.users[existingIndex].companyName = demo.companyName;
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
+
 function readDatabase(): AuthDatabase {
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
     if (!fs.existsSync(STORE_PATH)) {
-      const initial: AuthDatabase = { users: [], sessions: [] };
+      const initial: AuthDatabase = { users: [...DEMO_USERS], sessions: [] };
       fs.writeFileSync(STORE_PATH, JSON.stringify(initial, null, 2), "utf8");
       return initial;
     }
     const raw = fs.readFileSync(STORE_PATH, "utf8");
-    return JSON.parse(raw);
+    const db: AuthDatabase = JSON.parse(raw);
+    const changed = ensureDemoUsers(db);
+    if (changed) {
+      writeDatabase(db);
+    }
+    return db;
   } catch (err) {
     console.error("Failed to read auth database:", err);
-    return { users: [], sessions: [] };
+    return { users: [...DEMO_USERS], sessions: [] };
   }
 }
 
-// Atomic write: write to .tmp then rename over the real file so a crash
-// mid-write never leaves a truncated or partially-written store.
+// Atomic write: write to .tmp then rename over the real file
 function writeDatabase(data: AuthDatabase): void {
   try {
     if (!fs.existsSync(DATA_DIR)) {
@@ -90,24 +192,8 @@ function writeDatabase(data: AuthDatabase): void {
     fs.renameSync(STORE_TMP, STORE_PATH);
   } catch (err) {
     console.error("Failed to write auth database:", err);
-    // Clean up tmp file if it exists
     try { if (fs.existsSync(STORE_TMP)) fs.unlinkSync(STORE_TMP); } catch { /* ignore */ }
   }
-}
-
-// Cryptographic helpers
-export function hashPassword(password: string, salt: string): string {
-  return crypto
-    .pbkdf2Sync(password, salt, 100000, 64, "sha512")
-    .toString("hex");
-}
-
-export function generateSalt(): string {
-  return crypto.randomBytes(16).toString("hex");
-}
-
-export function generateToken(): string {
-  return crypto.randomBytes(32).toString("hex");
 }
 
 export function toSafeUser(user: StoredUser): SafeUser {
@@ -115,6 +201,9 @@ export function toSafeUser(user: StoredUser): SafeUser {
     id: user.id,
     name: user.name,
     email: user.email,
+    role: user.role || "candidate",
+    companyName: user.companyName,
+    title: user.title,
     createdAt: user.createdAt,
   };
 }
@@ -131,7 +220,13 @@ export function findUserById(id: string): StoredUser | null {
   return db.users.find((u) => u.id === id) || null;
 }
 
-export async function registerUser(name: string, email: string, password: string): Promise<{ user: SafeUser } | { error: string }> {
+export async function registerUser(
+  name: string,
+  email: string,
+  password: string,
+  role: "candidate" | "recruiter" = "candidate",
+  companyName?: string
+): Promise<{ user: SafeUser } | { error: string }> {
   const cleanName = name.trim();
   const cleanEmail = email.trim().toLowerCase();
 
@@ -170,6 +265,8 @@ export async function registerUser(name: string, email: string, password: string
       id: `usr_${crypto.randomUUID()}`,
       name: cleanName,
       email: cleanEmail,
+      role,
+      companyName: role === "recruiter" ? (companyName?.trim() || "TechCorp Global") : undefined,
       passwordHash: hash,
       passwordSalt: salt,
       createdAt: now,

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Sparkles, Menu, X, ArrowRight, LogIn, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,8 +11,15 @@ import { useAuth } from "@/lib/auth-context";
 
 export function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const { user, isLoading, logout } = useAuth();
+
+  async function handleLogout() {
+    await logout();
+    setMobileMenuOpen(false);
+    router.push("/login");
+  }
 
   const navLinks = [
     { href: "/#how-it-works", label: "How It Works" },
@@ -67,18 +74,22 @@ export function Navbar() {
         {/* Right Action buttons */}
         <div className="hidden sm:flex items-center gap-3">
           {!isLoading && user ? (
-            <div className="flex items-center gap-2.5">
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#141e34] border border-[#1e2d4f] text-xs text-slate-200">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#141e34] border border-[#1e2d4f] text-xs text-slate-200">
                 <User className="h-3.5 w-3.5 text-indigo-400" />
                 <span className="max-w-[120px] truncate font-medium">{user.name}</span>
+                {user.role === "recruiter" && (
+                  <Badge variant="indigo" className="text-[9px] py-0 px-1 ml-0.5">Recruiter</Badge>
+                )}
               </div>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                onClick={() => logout()}
-                className="text-xs text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 gap-1"
+                onClick={handleLogout}
+                className="text-xs text-rose-300 border-rose-900/50 hover:text-white hover:bg-rose-950/40 gap-1.5 h-8 px-2.5"
+                title="Log out of account"
               >
-                <LogOut className="h-3.5 w-3.5" />
+                <LogOut className="h-3.5 w-3.5 text-rose-400" />
                 <span>Log Out</span>
               </Button>
             </div>
@@ -141,20 +152,23 @@ export function Navbar() {
 
           <div className="pt-2 border-t border-[#1e2d4f] flex flex-col gap-2">
             {!isLoading && user ? (
-              <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-[#141e34] border border-[#1e2d4f]">
+              <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-[#141e34] border border-[#1e2d4f]">
                 <div className="text-xs">
-                  <p className="font-semibold text-white">{user.name}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="font-semibold text-white">{user.name}</p>
+                    {user.role === "recruiter" && (
+                      <Badge variant="indigo" className="text-[9px] py-0 px-1">Recruiter</Badge>
+                    )}
+                  </div>
                   <p className="text-slate-400 text-[11px] truncate">{user.email}</p>
                 </div>
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  onClick={() => {
-                    logout();
-                    setMobileMenuOpen(false);
-                  }}
-                  className="text-xs text-rose-400 hover:bg-rose-950/40"
+                  onClick={handleLogout}
+                  className="text-xs text-rose-300 border-rose-900/50 hover:bg-rose-950/40 gap-1"
                 >
+                  <LogOut className="h-3 w-3 text-rose-400" />
                   Log Out
                 </Button>
               </div>

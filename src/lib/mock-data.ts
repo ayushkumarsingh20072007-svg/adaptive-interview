@@ -214,15 +214,18 @@ export const QUESTION_BANK: Record<TargetRole, Question[]> = {
 };
 
 export const SAMPLE_REPORT: EvaluationReport = {
-  sessionId: "demo-session",
+  sessionId: "demo-session-alex",
   candidateName: "Alex Rivera",
   targetRole: "Full Stack Developer",
   experienceLevel: "Intermediate",
   interviewFocus: "Mixed (Architecture & Performance)",
-  completedAt: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+  completedAt: "Oct 11, 2026",
   durationMinutes: 18,
   overallScore: 88,
   verdict: "Strong Hire Recommendation",
+  shortlistStatus: "shortlisted",
+  shortlistNotes: "Outstanding distributed systems clarity. Strong command of Cache-Aside, Redis mutex, and RSC hydration.",
+  userId: "usr_demo_alex",
   metrics: [
     { category: "System Architecture", score: 92, level: "Mastery", totalEvaluated: 1 },
     { category: "Concurrency & State", score: 84, level: "Proficient", totalEvaluated: 1 },
@@ -295,3 +298,156 @@ export const SAMPLE_REPORT: EvaluationReport = {
   ],
   isDemoSimulation: true,
 };
+
+export const PRIYA_REPORT: EvaluationReport = {
+  sessionId: "demo-session-priya",
+  candidateName: "Priya Sharma",
+  targetRole: "Frontend Developer",
+  experienceLevel: "Intermediate",
+  interviewFocus: "Core Concepts & Web Performance",
+  completedAt: "Oct 10, 2026",
+  durationMinutes: 16,
+  overallScore: 78,
+  verdict: "Hire Recommendation",
+  shortlistStatus: "under-review",
+  shortlistNotes: "Strong foundational knowledge of React 19 hooks and CSS performance. Scheduled for team cultural alignment.",
+  userId: "usr_demo_priya",
+  metrics: [
+    { category: "Core React & State", score: 84, level: "Proficient", totalEvaluated: 1 },
+    { category: "Web Performance", score: 76, level: "Developing", totalEvaluated: 1 },
+    { category: "TypeScript & Types", score: 80, level: "Proficient", totalEvaluated: 1 },
+    { category: "UI Architecture", score: 72, level: "Developing", totalEvaluated: 1 },
+  ],
+  strengths: [
+    "Precise explanation of React rendering phases and state colocation benefits.",
+    "Good understanding of layout shifts (CLS) and image aspect-ratio reserves.",
+  ],
+  areasToImprove: [
+    "Deepen knowledge of micro-frontend module federation and memory leak mitigation.",
+    "Explore advanced bundle code-splitting with dynamic import error boundaries.",
+  ],
+  actionableRoadmap: [
+    "Practice using Chrome Performance tab for frame-rate and layout thrashing profiling.",
+    "Implement custom hook unit tests using Vitest and React Testing Library.",
+  ],
+  answerRecords: [
+    {
+      questionId: "fe-1",
+      questionText: "Explain the differences between client-side state managers and server-cache solutions. When is each preferred?",
+      category: "Core React & State",
+      difficulty: "intermediate",
+      answerText: "Client state like Zustand is for transient UI state such as modal toggles or active filters. Server state like React Query manages remote data with automatic background refetching and deduplication.",
+      submittedAt: "11:05 AM",
+      feedback: {
+        score: 84,
+        strengths: ["Clean distinction between transient and cached state", "Mentioned deduplication"],
+        gaps: ["Could discuss optimistic UI updates during network latency"],
+        adaptiveNote: "Solid fundamental clarity.",
+      },
+    },
+  ],
+  isDemoSimulation: true,
+};
+
+export const MARCUS_REPORT: EvaluationReport = {
+  sessionId: "demo-session-marcus",
+  candidateName: "Marcus Chen",
+  targetRole: "Backend Developer",
+  experienceLevel: "Intermediate",
+  interviewFocus: "DSA & Database Internals",
+  completedAt: "Oct 9, 2026",
+  durationMinutes: 14,
+  overallScore: 54,
+  verdict: "Additional Review Recommended",
+  shortlistStatus: "under-review",
+  shortlistNotes: "Demonstrated basic SQL queries but struggled with composite indexing and lock isolation levels under high concurrency.",
+  userId: "usr_demo_marcus",
+  metrics: [
+    { category: "Database Internals", score: 58, level: "Needs Focus", totalEvaluated: 1 },
+    { category: "System Reliability", score: 52, level: "Needs Focus", totalEvaluated: 1 },
+    { category: "API Design", score: 62, level: "Developing", totalEvaluated: 1 },
+  ],
+  strengths: [
+    "Accurately articulated the basics of RESTful error status codes and idempotent PUT/DELETE operations.",
+  ],
+  areasToImprove: [
+    "Need deeper conceptual grasp of database ACID transaction isolation levels (Repeatable Read vs Serializable).",
+    "Practice building circuit breaker patterns for downstream API failures.",
+  ],
+  actionableRoadmap: [
+    "Study PostgreSQL MVCC (Multi-Version Concurrency Control) documentation.",
+    "Implement an exponential backoff with jitter retry utility in Node.js.",
+  ],
+  answerRecords: [
+    {
+      questionId: "be-1",
+      questionText: "How do you prevent SQL connection pool exhaustion during traffic spikes?",
+      category: "Database Internals",
+      difficulty: "intermediate",
+      answerText: "By setting max connections in the pool config and using Redis to cache common queries.",
+      submittedAt: "02:15 PM",
+      feedback: {
+        score: 54,
+        strengths: ["Mentioned max pool connection bounds"],
+        gaps: ["Did not mention connection timeout queues, read replicas, or circuit breaking"],
+        adaptiveNote: "Candidate provided brief overview without failure mode analysis.",
+      },
+    },
+  ],
+  isDemoSimulation: true,
+};
+
+export const ROHAN_REPORT: EvaluationReport = {
+  sessionId: "demo-session-rohan",
+  candidateName: "Rohan Gupta",
+  targetRole: "Python Developer",
+  experienceLevel: "Beginner",
+  interviewFocus: "Core Concepts",
+  completedAt: "Oct 11, 2026",
+  durationMinutes: 2,
+  overallScore: 0,
+  verdict: "Additional Review Recommended",
+  shortlistStatus: "rejected",
+  shortlistNotes: "Answers submitted were empty or missing technical keywords. Foundational preparation required before reconsidering.",
+  userId: "usr_demo_rohan",
+  metrics: [
+    { category: "Python Internals", score: 0, level: "Needs Focus", totalEvaluated: 1 },
+    { category: "Algorithms & Logic", score: 0, level: "Needs Focus", totalEvaluated: 1 },
+    { category: "Data Structures", score: 0, level: "Needs Focus", totalEvaluated: 1 },
+  ],
+  strengths: [
+    "Attempted session under timed environment.",
+  ],
+  areasToImprove: [
+    "Complete technical responses with appropriate Python keywords and syntax.",
+    "Review core data structures: lists, dictionaries, sets, and generator functions.",
+  ],
+  actionableRoadmap: [
+    "Complete foundational Python programming tutorials and exercises.",
+    "Solve beginner-level algorithm problems on LeetCode.",
+  ],
+  answerRecords: [
+    {
+      questionId: "py-1",
+      questionText: "Explain how Python manages memory with reference counting and cyclic garbage collection.",
+      category: "Python Internals",
+      difficulty: "beginner",
+      answerText: "",
+      submittedAt: "09:30 AM",
+      feedback: {
+        score: 0,
+        strengths: [],
+        gaps: ["No answer text submitted."],
+        adaptiveNote: "Candidate submitted blank response.",
+      },
+    },
+  ],
+  isDemoSimulation: true,
+};
+
+export const ALL_DEMO_REPORTS: EvaluationReport[] = [
+  SAMPLE_REPORT,
+  PRIYA_REPORT,
+  MARCUS_REPORT,
+  ROHAN_REPORT,
+];

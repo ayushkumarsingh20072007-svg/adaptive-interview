@@ -13,6 +13,8 @@ import {
   BrainCircuit,
   Cpu,
   Zap,
+  FileText,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -87,6 +89,7 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
   const [evalError, setEvalError] = React.useState<string | null>(null);
   const [showHintModal, setShowHintModal] = React.useState(false);
   const [showEndConfirmModal, setShowEndConfirmModal] = React.useState(false);
+  const [showResumeModal, setShowResumeModal] = React.useState(false);
   const [elapsedSeconds, setElapsedSeconds] = React.useState<number>(0);
   const [isAiPowered, setIsAiPowered] = React.useState(true);
   const isMounted = useIsMounted();
@@ -135,7 +138,7 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
 
       // Fresh session: generate first question
       try {
-        const q = await aiGenerateInitialQuestion(targetSetup);
+        const q = await aiGenerateInitialQuestion(targetSetup, targetSetup.resumeText);
         if (!cancelled) {
           setCurrentQuestion(q);
           setAiStatus("ready");
@@ -413,7 +416,21 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {session.setup.resumeFileName && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowResumeModal(true)}
+              className="gap-1.5 text-xs text-indigo-300 border-indigo-800/60 bg-indigo-950/40 hover:bg-indigo-900/50 hover:text-white"
+              title="Inspect uploaded resume"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline truncate max-w-[140px]">{session.setup.resumeFileName}</span>
+              <span className="sm:hidden">Resume</span>
+            </Button>
+          )}
+
           <div className="flex items-center gap-1.5 rounded-lg border border-[#1e2d4f] bg-[#0c1222] px-3 py-1.5 text-xs text-slate-300 font-mono">
             <Clock className="h-3.5 w-3.5 text-indigo-400" />
             <span>{formatTime(elapsedSeconds)}</span>
@@ -754,6 +771,64 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
           </div>
         </div>
       </Modal>
+
+      {/* Resume In-Interview Modal */}
+      {session.setup.resumeFileName && (
+        <Modal
+          isOpen={showResumeModal}
+          onClose={() => setShowResumeModal(false)}
+          title="Candidate Resume Reference"
+          description={`Resume associated with this interview: ${session.setup.resumeFileName}`}
+          className="max-w-2xl"
+        >
+          <div className="space-y-4 text-xs">
+            <div className="rounded-lg border border-[#1e2d4f] bg-[#0c1222] p-3 flex items-center justify-between">
+              <div>
+                <p className="font-semibold text-white">{session.setup.candidateName}</p>
+                <p className="text-slate-400 mt-0.5">
+                  Target Role: <strong className="text-indigo-300">{ROLE_LABELS[session.setup.targetRole]}</strong> • {session.setup.experienceLevel}
+                </p>
+              </div>
+              <Badge variant="indigo">{session.setup.resumeFileSize || "Uploaded"}</Badge>
+            </div>
+
+            {session.setup.resumeText ? (
+              <pre className="p-3 bg-[#070b14] rounded border border-[#1e2d4f] text-slate-300 whitespace-pre-wrap font-mono max-h-[350px] overflow-y-auto">
+                {session.setup.resumeText}
+              </pre>
+            ) : session.setup.isSampleResume ? (
+              <div className="p-4 bg-[#070b14] rounded border border-[#1e2d4f] text-slate-300 space-y-2 max-h-[350px] overflow-y-auto">
+                <p className="font-semibold text-white text-sm">Alex Rivera — Senior Full-Stack Engineer</p>
+                <p className="text-slate-400">San Francisco, CA • alex.rivera@example.com</p>
+                <p className="pt-2 text-slate-300">
+                  5+ years building Next.js, Node.js, and PostgreSQL distributed systems. Lead engineer at FinTech Labs.
+                </p>
+                <div className="flex flex-wrap gap-1 pt-2">
+                  {session.setup.skills.map((s) => (
+                    <Badge key={s} variant="default" className="text-[10px]">
+                      {s}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 bg-[#070b14] rounded border border-[#1e2d4f] text-center space-y-2">
+                <FileText className="h-8 w-8 mx-auto text-indigo-400" />
+                <p className="text-white font-medium">{session.setup.resumeFileName}</p>
+                <p className="text-slate-400">
+                  Calibrated profile active for this interview session.
+                </p>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2">
+              <Button size="sm" variant="outline" onClick={() => setShowResumeModal(false)}>
+                Close Preview
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

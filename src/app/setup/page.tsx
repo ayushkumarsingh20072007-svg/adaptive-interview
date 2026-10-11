@@ -12,12 +12,21 @@ import {
   ArrowLeft,
   Clock,
   AlertCircle,
+  Eye,
+  RefreshCw,
+  CheckCircle2,
+  ExternalLink,
+  FileText,
+  ShieldCheck,
+  Check,
+  LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Modal } from "@/components/ui/modal";
 import {
   CandidateSetup,
   TargetRole,
@@ -30,7 +39,7 @@ import { useAuth } from "@/lib/auth-context";
 
 export default function CandidateSetupPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
 
   // Initialize state with static defaults for SSR, hydrate in useEffect
   const [candidateName, setCandidateName] = React.useState<string>("");
@@ -42,7 +51,15 @@ export default function CandidateSetupPage() {
     name: string;
     size: string;
     isSample: boolean;
+    previewUrl?: string;
+    extractedSnippet?: string;
+    detectedName?: string;
   } | null>(null);
+
+  const [isPreviewOpen, setIsPreviewOpen] = React.useState<boolean>(false);
+  const [isDragging, setIsDragging] = React.useState<boolean>(false);
+  const [isResumeVerified, setIsResumeVerified] = React.useState<boolean>(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     const existing = getStoredSetup();
@@ -62,7 +79,10 @@ export default function CandidateSetupPage() {
           name: existing.resumeFileName,
           size: existing.resumeFileSize || "2.4 MB",
           isSample: existing.isSampleResume ?? false,
+          previewUrl: existing.resumePreviewUrl,
+          extractedSnippet: existing.resumeText,
         });
+        setIsResumeVerified(true);
       }
     });
   }, [user]);
@@ -70,42 +90,108 @@ export default function CandidateSetupPage() {
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
-  // Handle Real File Selection
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  // Process dropped or selected file
+  function processFile(file: File) {
     // Validate type
-    const validExtensions = [".pdf", ".docx"];
+    const validExtensions = [".pdf", ".docx", ".txt"];
     const fileExt = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
     if (!validExtensions.includes(fileExt)) {
       setErrors((prev) => ({
         ...prev,
-        resume: "Accepted file formats are PDF (.pdf) or Word (.docx).",
+        resume: "Accepted formats are PDF (.pdf), Word (.docx), or Text (.txt).",
       }));
       return;
     }
 
-    // Validate size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
+    // Validate size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
       setErrors((prev) => ({
         ...prev,
-        resume: "File size exceeds 5MB limit. Please select a smaller file.",
+        resume: "File size exceeds 10MB limit. Please select a smaller file.",
       }));
       return;
     }
 
     const formattedSize = (file.size / (1024 * 1024)).toFixed(1) + " MB";
-    setResumeFile({
-      name: file.name,
-      size: formattedSize,
-      isSample: false,
-    });
+    let previewUrl: string | undefined;
+    try {
+      previewUrl = URL.createObjectURL(file);
+    } catch {
+      // ignore
+    }
+
+    // Heuristically suggest candidate name from filename if not yet filled
+    const cleanBaseName = file.name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+    const potentialName = cleanBaseName
+      .replace(/\b(resume|cv|curriculum|vitae|developer|engineer|fullstack|frontend|backend|swe)\b/gi, "")
+      .trim();
+
+    if (!candidateName && potentialName.length >= 3) {
+      setCandidateName(potentialName);
+    }
+
+    if (file.type.includes("text") || fileExt === ".txt") {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const text = (ev.target?.result as string) || "";
+        setResumeFile({
+          name: file.name,
+          size: formattedSize,
+          isSample: false,
+          previewUrl,
+          extractedSnippet: text.slice(0, 2000),
+          detectedName: potentialName.length >= 3 ? potentialName : undefined,
+        });
+        setIsResumeVerified(false);
+      };
+      reader.readAsText(file);
+    } else {
+      setResumeFile({
+        name: file.name,
+        size: formattedSize,
+        isSample: false,
+        previewUrl,
+        detectedName: potentialName.length >= 3 ? potentialName : undefined,
+      });
+      setIsResumeVerified(false);
+    }
+
     setErrors((prev) => {
       const next = { ...prev };
       delete next.resume;
       return next;
     });
+  }
+
+  // Handle Real File Selection from input
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    processFile(file);
+    e.target.value = "";
+  }
+
+  // Drag & drop handlers
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      processFile(file);
+    }
   }
 
   // Load Sample Resume Shortcut
@@ -119,13 +205,23 @@ export default function CandidateSetupPage() {
       name: SAMPLE_CANDIDATE.resumeFileName || "Alex_Rivera_FullStack_Resume.pdf",
       size: SAMPLE_CANDIDATE.resumeFileSize || "2.4 MB",
       isSample: true,
+      detectedName: "Alex Rivera",
     });
+    setIsResumeVerified(true);
     setErrors({});
   }
 
   // Remove Selected Resume
   function handleRemoveResume() {
+    if (resumeFile?.previewUrl) {
+      URL.revokeObjectURL(resumeFile.previewUrl);
+    }
     setResumeFile(null);
+    setIsResumeVerified(false);
+  }
+
+  function handleReplaceResume() {
+    fileInputRef.current?.click();
   }
 
   // Handle Submit Form
@@ -153,6 +249,8 @@ export default function CandidateSetupPage() {
       resumeFileName: resumeFile?.name,
       resumeFileSize: resumeFile?.size,
       isSampleResume: resumeFile?.isSample ?? false,
+      resumePreviewUrl: resumeFile?.previewUrl,
+      resumeText: resumeFile?.extractedSnippet,
       skills: ROLE_SKILLS[targetRole] || [],
       createdAt: new Date().toISOString(),
       userId: user?.id,
@@ -201,14 +299,30 @@ export default function CandidateSetupPage() {
 
       {/* Auth or Guest Mode Notification Banner */}
       {user ? (
-        <div className="rounded-lg border border-emerald-800/60 bg-emerald-950/20 px-4 py-2.5 text-xs text-emerald-300 flex items-center justify-between">
+        <div className="rounded-lg border border-emerald-800/60 bg-emerald-950/20 px-4 py-2.5 text-xs text-emerald-300 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-emerald-400" />
             <span>
               Signed in as <strong className="text-white">{user.name}</strong> ({user.email}). Your interview results will link to your account.
             </span>
           </div>
-          <Badge variant="success">Authenticated</Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant="success">Authenticated</Badge>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={async () => {
+                await logout();
+                router.refresh();
+              }}
+              className="text-xs text-rose-300 hover:text-white hover:bg-rose-950/40 gap-1 h-7 px-2"
+              title="Log out of this account"
+            >
+              <LogOut className="h-3 w-3 text-rose-400" />
+              <span>Log Out</span>
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="rounded-lg border border-[#1e2d4f] bg-[#0c1222]/80 px-4 py-2.5 text-xs text-slate-300 flex items-center justify-between">
@@ -261,54 +375,143 @@ export default function CandidateSetupPage() {
 
               {/* Resume Ingest Area */}
               <div>
-                <Label>Resume Upload (.pdf, .docx)</Label>
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="mb-0">Resume Ingestion (.pdf, .docx, .txt)</Label>
+                  {resumeFile && (
+                    <span className="text-[11px] text-slate-400">
+                      {isResumeVerified ? (
+                        <span className="text-emerald-400 flex items-center gap-1 font-medium">
+                          <CheckCircle2 className="h-3 w-3" /> Verified by you
+                        </span>
+                      ) : (
+                        <span className="text-amber-400/90 flex items-center gap-1 font-medium">
+                          <AlertCircle className="h-3 w-3" /> Needs verification
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </div>
+
+                {/* Hidden File Input for click and replacement */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.docx,.txt"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
 
                 {resumeFile ? (
-                  <div className="flex items-center justify-between rounded-lg border border-indigo-800/60 bg-indigo-950/30 p-3.5">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-900/60 text-indigo-300">
-                        <FileCheck className="h-5 w-5" />
+                  <div className="rounded-xl border border-indigo-800/70 bg-gradient-to-br from-[#0c1222] via-[#0f172a] to-[#141b36] p-4 shadow-lg shadow-indigo-950/20">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-indigo-950 border border-indigo-700/50 text-indigo-300">
+                          <FileCheck className="h-5 w-5 text-indigo-400" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-semibold text-white truncate max-w-[220px] sm:max-w-xs">
+                              {resumeFile.name}
+                            </p>
+                            {resumeFile.isSample ? (
+                              <Badge variant="indigo" className="text-[10px] py-0 px-1.5">
+                                Sample Profile
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] py-0 px-1.5 text-slate-300 border-slate-700">
+                                Uploaded File
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-indigo-300/80 font-mono mt-0.5">
+                            {resumeFile.size} • {resumeFile.name.endsWith(".pdf") ? "PDF Document" : resumeFile.name.endsWith(".docx") ? "Word Document" : "Plain Text"}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-white truncate max-w-[220px] sm:max-w-xs">
-                          {resumeFile.name}
-                        </p>
-                        <p className="text-xs text-indigo-300 font-mono">
-                          {resumeFile.size} {resumeFile.isSample ? "• Sample Profile Loaded" : "• Ready for calibration"}
-                        </p>
+
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setIsPreviewOpen(true)}
+                          className="gap-1.5 text-xs text-indigo-300 border-indigo-700/60 bg-indigo-950/50 hover:bg-indigo-900/60 hover:text-white"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          Verify & Preview
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleReplaceResume}
+                          title="Upload different resume"
+                          className="gap-1 text-xs text-slate-300 hover:text-white hover:bg-slate-800/60"
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" />
+                          <span className="hidden sm:inline">Change</span>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={handleRemoveResume}
+                          aria-label="Remove resume"
+                          className="text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 h-8 w-8"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={handleRemoveResume}
-                      aria-label="Remove resume"
-                      className="text-slate-400 hover:text-rose-400"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+
+                    {/* Verification Prompt Bar */}
+                    <div className="mt-3 pt-3 border-t border-[#1e2d4f]/60 flex items-center justify-between text-xs text-slate-400">
+                      <div className="flex items-center gap-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                        <span>
+                          {isResumeVerified
+                            ? "Document verified: Ready for candidate calibration."
+                            : "Check your resume to confirm it is the right file."}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsPreviewOpen(true)}
+                        className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 text-xs font-medium"
+                      >
+                        Inspect content →
+                      </button>
+                    </div>
                   </div>
                 ) : (
-                  <label className="flex flex-col items-center justify-center rounded-lg border border-dashed border-[#22304e] bg-[#070b14]/50 p-6 text-center cursor-pointer hover:border-indigo-500/60 transition-colors">
-                    <UploadCloud className="h-8 w-8 text-indigo-400 mb-2" />
-                    <p className="text-sm font-medium text-slate-200">
-                      Click to browse or drag and drop your resume
+                  <div
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center cursor-pointer transition-all duration-200 ${
+                      isDragging
+                        ? "border-indigo-400 bg-indigo-950/60 ring-4 ring-indigo-500/20 scale-[1.01]"
+                        : "border-[#22304e] bg-[#070b14]/50 hover:border-indigo-500/60 hover:bg-[#0c1222]/60"
+                    }`}
+                  >
+                    <div className={`flex h-12 w-12 items-center justify-center rounded-full transition-transform ${
+                      isDragging ? "bg-indigo-600 text-white scale-110" : "bg-indigo-950/80 text-indigo-400"
+                    } mb-3`}>
+                      <UploadCloud className="h-6 w-6" />
+                    </div>
+                    <p className="text-sm font-semibold text-slate-200">
+                      {isDragging ? "Release to drop and inspect resume" : "Click to browse or drag and drop your resume"}
                     </p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Supports PDF or DOCX up to 5MB (Metadata parsed locally)
+                    <p className="text-xs text-slate-400 mt-1 max-w-sm">
+                      Supports PDF, DOCX, or TXT up to 10MB. You can preview and verify the document before starting.
                     </p>
-                    <input
-                      type="file"
-                      accept=".pdf,.docx"
-                      onChange={handleFileChange}
-                      className="hidden"
-                    />
-                  </label>
+                  </div>
                 )}
 
                 {errors.resume && (
-                  <p className="text-xs text-rose-400 mt-1 flex items-center gap-1">
+                  <p className="text-xs text-rose-400 mt-1.5 flex items-center gap-1">
                     <AlertCircle className="h-3.5 w-3.5" />
                     {errors.resume}
                   </p>
@@ -512,6 +715,211 @@ export default function CandidateSetupPage() {
           </Card>
         </div>
       </form>
+
+      {/* Resume Preview & Verification Modal */}
+      {resumeFile && (
+        <Modal
+          isOpen={isPreviewOpen}
+          onClose={() => setIsPreviewOpen(false)}
+          title="Verify Uploaded Resume"
+          description="Confirm that this resume belongs to you and matches your target role before interview simulation."
+          className="max-w-3xl sm:max-w-4xl"
+        >
+          <div className="space-y-4">
+            {/* Top Verification Header Card */}
+            <div className="rounded-lg border border-[#1e2d4f] bg-[#0c1222] p-3 text-xs flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-950 text-indigo-300 font-mono">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-white">{resumeFile.name}</span>
+                    <Badge variant="indigo" className="text-[10px] py-0 px-1.5">
+                      {resumeFile.size}
+                    </Badge>
+                  </div>
+                  <p className="text-slate-400 mt-0.5">
+                    Target Role: <strong className="text-slate-200">{ROLE_LABELS[targetRole]}</strong> • Seniority: <strong className="text-slate-200">{experienceLevel}</strong>
+                  </p>
+                </div>
+              </div>
+
+              {resumeFile.previewUrl && resumeFile.name.toLowerCase().endsWith(".pdf") && (
+                <a
+                  href={resumeFile.previewUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 font-medium underline underline-offset-2"
+                >
+                  Open in New Window
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+            </div>
+
+            {/* Viewer Content Area */}
+            <div className="rounded-lg border border-[#1e2d4f] bg-[#070b14] overflow-hidden">
+              {resumeFile.previewUrl && resumeFile.name.toLowerCase().endsWith(".pdf") ? (
+                <div className="relative">
+                  <iframe
+                    src={resumeFile.previewUrl}
+                    title="Resume Document Preview"
+                    className="w-full h-[500px] bg-slate-900"
+                  />
+                  <div className="p-2 border-t border-[#1e2d4f] bg-[#0c1222] text-[11px] text-slate-400 flex items-center justify-between">
+                    <span>PDF Document Ingested & Rendered</span>
+                    <a
+                      href={resumeFile.previewUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-indigo-400 hover:underline flex items-center gap-1"
+                    >
+                      If PDF preview is blocked by browser, click here to view <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                </div>
+              ) : resumeFile.isSample ? (
+                /* Sample Resume Full Formatted View */
+                <div className="p-6 max-h-[500px] overflow-y-auto space-y-5 bg-[#090e1a] text-slate-200 text-xs">
+                  <div className="border-b border-[#1e2d4f] pb-4">
+                    <h2 className="text-xl font-bold text-white">Alex Rivera</h2>
+                    <p className="text-indigo-400 font-medium mt-0.5">Senior Full-Stack Software Engineer</p>
+                    <p className="text-slate-400 mt-1">
+                      San Francisco, CA • alex.rivera@example.com • github.com/alexrivera • linkedin.com/in/alexrivera
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-indigo-300 mb-1.5">
+                      Professional Summary
+                    </h3>
+                    <p className="text-slate-300 leading-relaxed">
+                      Accomplished Full-Stack Engineer with 5+ years of production experience architecting scalable Next.js and Node.js microservices. Proven track record reducing database query latency by 45% using Redis caching and PostgreSQL indexing. Passionate about resilient systems and distributed architectures.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-indigo-300 mb-2">
+                      Work Experience
+                    </h3>
+                    <div className="space-y-3">
+                      <div>
+                        <div className="flex justify-between items-center text-slate-200 font-semibold">
+                          <span>Senior Full-Stack Engineer — FinTech Labs</span>
+                          <span className="text-slate-400 text-[11px] font-mono">2022 — Present</span>
+                        </div>
+                        <ul className="list-disc list-inside text-slate-400 mt-1 space-y-0.5 pl-1">
+                          <li>Spearheaded transition of core transaction service to Next.js 14 & Node.js, handling 15,000+ RPM.</li>
+                          <li>Implemented cache-aside strategy with Redis and distributed mutexes to eliminate cache stampedes.</li>
+                          <li>Designed automated CI/CD deployment pipelines on Kubernetes with zero-downtime rolling deploys.</li>
+                        </ul>
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between items-center text-slate-200 font-semibold">
+                          <span>Full-Stack Developer — CloudScale Solutions</span>
+                          <span className="text-slate-400 text-[11px] font-mono">2020 — 2022</span>
+                        </div>
+                        <ul className="list-disc list-inside text-slate-400 mt-1 space-y-0.5 pl-1">
+                          <li>Developed interactive real-time telemetry dashboards using React, TypeScript, and WebSockets.</li>
+                          <li>Engineered PostgreSQL schemas with partitioned tables, improving multi-tenant report query throughput.</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-indigo-300 mb-2">
+                      Technical Skills & Competencies
+                    </h3>
+                    <div className="flex flex-wrap gap-1.5">
+                      {["Next.js", "React", "TypeScript", "Node.js", "PostgreSQL", "Redis", "Docker", "System Design", "REST / GraphQL", "AWS / GCP"].map((sk) => (
+                        <Badge key={sk} variant="default" className="text-[11px]">
+                          {sk}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-indigo-300 mb-1">
+                      Education
+                    </h3>
+                    <div className="flex justify-between items-center text-slate-300">
+                      <span>B.S. in Computer Science — University of California, Berkeley</span>
+                      <span className="text-slate-400 text-[11px] font-mono">2016 — 2020</span>
+                    </div>
+                  </div>
+                </div>
+              ) : resumeFile.extractedSnippet ? (
+                /* Text Snippet Preview */
+                <div className="p-4 max-h-[500px] overflow-y-auto">
+                  <pre className="whitespace-pre-wrap font-mono text-xs text-slate-300 bg-[#070b14] p-3 rounded border border-[#1e2d4f]">
+                    {resumeFile.extractedSnippet}
+                  </pre>
+                </div>
+              ) : (
+                /* DOCX or binary fallback inspection */
+                <div className="p-8 text-center space-y-4">
+                  <div className="flex h-16 w-16 mx-auto items-center justify-center rounded-2xl bg-indigo-950/70 border border-indigo-800/60 text-indigo-400">
+                    <FileCheck className="h-8 w-8" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-semibold text-white">{resumeFile.name}</h4>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Word Document (.docx) • {resumeFile.size} • Ready for Calibration
+                    </p>
+                  </div>
+                  <div className="max-w-md mx-auto text-left rounded-lg border border-[#1e2d4f] bg-[#0c1222] p-4 text-xs space-y-2 text-slate-300">
+                    <div className="flex items-center gap-2 text-emerald-400">
+                      <CheckCircle2 className="h-4 w-4 shrink-0" />
+                      <span>Valid document format accepted</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-emerald-400">
+                      <CheckCircle2 className="h-4 w-4 shrink-0" />
+                      <span>File size within 10MB limit</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-indigo-400">
+                      <ShieldCheck className="h-4 w-4 shrink-0" />
+                      <span>Ready to be used for personalized questions & AI evaluation</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Decision Footer */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-[#1e2d4f]">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setIsPreviewOpen(false);
+                  handleReplaceResume();
+                }}
+                className="gap-2 text-xs text-rose-300 hover:text-rose-200 hover:bg-rose-950/30 w-full sm:w-auto"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Wrong Resume? Pick Another File
+              </Button>
+
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => {
+                  setIsResumeVerified(true);
+                  setIsPreviewOpen(false);
+                }}
+                className="gap-2 text-xs w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white font-medium"
+              >
+                <Check className="h-4 w-4" />
+                Yes, this is my resume (Confirm)
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

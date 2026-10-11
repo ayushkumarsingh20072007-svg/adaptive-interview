@@ -10,10 +10,27 @@ export type ExperienceLevel = "beginner" | "intermediate" | "advanced";
 
 export type InterviewFocus = "dsa" | "core-concepts" | "projects" | "mixed";
 
+export type UserRole = "candidate" | "recruiter";
+
+export type ShortlistStatus = "pending" | "shortlisted" | "under-review" | "rejected";
+
+export interface CandidateShortlistRecord {
+  sessionId: string;
+  candidateId?: string;
+  candidateName: string;
+  status: ShortlistStatus;
+  updatedAt: string;
+  notes?: string;
+  reviewedBy?: string;
+}
+
 export interface UserAccount {
   id: string;
   name: string;
   email: string;
+  role: UserRole;
+  companyName?: string;
+  title?: string;
   createdAt: string;
 }
 
@@ -26,6 +43,8 @@ export interface CandidateSetup {
   resumeFileName?: string;
   resumeFileSize?: string;
   isSampleResume?: boolean;
+  resumePreviewUrl?: string;
+  resumeText?: string;
   skills: string[];
   createdAt: string;
   userId?: string;
@@ -100,5 +119,7 @@ export interface EvaluationReport {
   answerRecords: AnswerRecord[];
   isDemoSimulation: boolean;
   userId?: string;
+  shortlistStatus?: ShortlistStatus;
+  shortlistNotes?: string;
 }
 

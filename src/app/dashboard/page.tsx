@@ -25,6 +25,14 @@ import {
   Clock,
   ShieldCheck,
   Zap,
+  Users,
+  Star,
+  XCircle,
+  Clock3,
+  Building2,
+  Filter,
+  ChevronRight,
+  LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
@@ -47,8 +55,12 @@ interface CompetencyStat {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user } = useAuth();
-  const [activeTab, setActiveTab] = React.useState<"overview" | "history" | "skills" | "settings">("overview");
+  const { user, logout } = useAuth();
+  const userRole = (user as { role?: string } | null)?.role;
+  const isRecruiter = userRole === "recruiter";
+  const [activeTab, setActiveTab] = React.useState<"overview" | "history" | "skills" | "settings" | "pipeline">(
+    isRecruiter ? "pipeline" : "overview"
+  );
 
   const isMounted = useIsMounted();
 
@@ -59,10 +71,28 @@ export default function DashboardPage() {
 
   const reports: EvaluationReport[] = React.useMemo(() => {
     if (!isMounted) return [];
-    return getAllReports(user?.id);
-  }, [isMounted, user?.id]);
+    return getAllReports(user?.id, userRole as "candidate" | "recruiter" | undefined);
+  }, [isMounted, user?.id, userRole]);
 
   const [isStarting, setIsStarting] = React.useState(false);
+
+  // --- PIPELINE STATE (Recruiter) ---
+  const [pipelineFilter, setPipelineFilter] = React.useState<"all" | "pending" | "shortlisted" | "under-review" | "rejected">("all");
+  const [pipelineShortlists, setPipelineShortlists] = React.useState<Record<string, string>>({});
+
+  function handlePipelineStatusChange(sessionId: string, candidateName: string, status: string) {
+    setPipelineShortlists((prev) => ({ ...prev, [sessionId]: status }));
+    // Persist via storage
+    import("@/lib/storage").then(({ updateCandidateShortlist }) => {
+      updateCandidateShortlist(
+        sessionId,
+        candidateName,
+        status as import("@/lib/types").ShortlistStatus,
+        undefined,
+        user?.name
+      );
+    });
+  }
 
   function handleStartNewInterview(customRole?: TargetRole) {
     setIsStarting(true);
@@ -76,6 +106,11 @@ export default function DashboardPage() {
     setTimeout(() => {
       router.push(`/interview/${newSession.id}`);
     }, 200);
+  }
+
+  async function handleLogout() {
+    await logout();
+    router.push("/login");
   }
 
   // --- TRUTHFUL ANALYTICS CALCULATIONS ---
@@ -189,14 +224,33 @@ export default function DashboardPage() {
               </span>
 
               {user ? (
-                <Badge variant="success" className="text-[11px]">
-                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                  Verified: {user.email}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="success" className="text-[11px]">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Verified: {user.email}
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleLogout}
+                    className="h-6 px-2 text-[11px] text-rose-300 hover:text-white hover:bg-rose-950/40 gap-1"
+                    title="Log out of account"
+                  >
+                    <LogOut className="h-3 w-3 text-rose-400" />
+                    Log Out
+                  </Button>
+                </div>
               ) : (
-                <Badge variant="default" className="text-[11px]">
-                  Guest Demo Sandbox
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="default" className="text-[11px]">
+                    Guest Demo Sandbox
+                  </Badge>
+                  <Link href="/login">
+                    <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px] text-indigo-300 hover:text-white hover:bg-indigo-950/40 gap-1">
+                      Sign In
+                    </Button>
+                  </Link>
+                </div>
               )}
 
               <span className="text-xs text-slate-400 font-mono flex items-center gap-1">
@@ -214,7 +268,20 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 shrink-0">
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {user && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLogout}
+                className="gap-1.5 text-xs h-10 px-3.5 border-rose-900/50 text-rose-300 hover:bg-rose-950/40 hover:text-white"
+                title="Log out of account"
+              >
+                <LogOut className="h-3.5 w-3.5 text-rose-400" />
+                <span className="hidden sm:inline">Log Out</span>
+              </Button>
+            )}
+
             <Link href="/setup">
               <Button variant="secondary" size="sm" className="gap-2 text-xs h-10 px-4">
                 <Settings className="h-3.5 w-3.5 text-slate-400" />
@@ -389,6 +456,23 @@ export default function DashboardPage() {
           <User className="h-4 w-4" />
           Profile Configuration
         </button>
+
+        {isRecruiter && (
+          <button
+            onClick={() => setActiveTab("pipeline")}
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
+              activeTab === "pipeline"
+                ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-md shadow-violet-950/80"
+                : "text-slate-400 hover:text-slate-200 hover:bg-[#131d35]/60"
+            }`}
+          >
+            <Users className="h-4 w-4" />
+            Candidate Pipeline
+            <span className="ml-0.5 h-4.5 min-w-[1.125rem] rounded-full bg-violet-600/80 text-[10px] font-bold flex items-center justify-center px-1">
+              {reports.length}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* ========================================================================= */}
@@ -1025,8 +1109,243 @@ export default function DashboardPage() {
               </Link>
             </CardFooter>
           </Card>
+
+          {/* Account & Session Card */}
+          <Card className="border-[#1e2d4f]">
+            <CardHeader>
+              <CardTitle>Account & Authentication Session</CardTitle>
+              <CardDescription>
+                Manage your credentials and active session state.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 text-xs">
+              {user ? (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-indigo-950/60 bg-[#0a0f1d]">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white text-sm">{user.name}</span>
+                      <Badge variant="indigo" className="text-[10px] capitalize">{user.role}</Badge>
+                    </div>
+                    <p className="text-slate-400 font-mono">{user.email}</p>
+                    <p className="text-[11px] text-emerald-400 flex items-center gap-1 mt-1">
+                      <CheckCircle2 className="h-3 w-3" /> Secure session cookie active
+                    </p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={handleLogout}
+                    className="gap-2 text-xs shrink-0 self-start sm:self-auto"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Log Out of Account
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-[#1e2d4f] bg-[#0a0f1d]">
+                  <div className="space-y-1">
+                    <p className="font-semibold text-white text-sm">Guest Sandbox Mode</p>
+                    <p className="text-slate-400">
+                      You are using a browser-local demo session. Sign in to permanently link evaluation reports.
+                    </p>
+                  </div>
+                  <Link href="/login" className="shrink-0">
+                    <Button size="sm" className="gap-2 text-xs">
+                      Sign In / Register
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </Link>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* TAB 5: RECRUITER CANDIDATE PIPELINE                                       */}
+      {/* ========================================================================= */}
+      {activeTab === "pipeline" && isRecruiter && (() => {
+        const statusMeta: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+          shortlisted:   { label: "Shortlisted",    color: "text-emerald-400", icon: <Star className="h-3.5 w-3.5" /> },
+          "under-review": { label: "Under Review",   color: "text-amber-400",   icon: <Clock3 className="h-3.5 w-3.5" /> },
+          rejected:      { label: "Rejected",       color: "text-rose-400",    icon: <XCircle className="h-3.5 w-3.5" /> },
+          pending:       { label: "Pending Review",  color: "text-slate-400",   icon: <Building2 className="h-3.5 w-3.5" /> },
+        };
+
+        const filteredReports = reports.filter((rep) => {
+          const effectiveStatus = pipelineShortlists[rep.sessionId] ?? rep.shortlistStatus ?? "pending";
+          return pipelineFilter === "all" || effectiveStatus === pipelineFilter;
+        });
+
+        const pipelineCounts = {
+          all: reports.length,
+          shortlisted: reports.filter((r) => (pipelineShortlists[r.sessionId] ?? r.shortlistStatus ?? "pending") === "shortlisted").length,
+          "under-review": reports.filter((r) => (pipelineShortlists[r.sessionId] ?? r.shortlistStatus ?? "pending") === "under-review").length,
+          rejected: reports.filter((r) => (pipelineShortlists[r.sessionId] ?? r.shortlistStatus ?? "pending") === "rejected").length,
+          pending: reports.filter((r) => (pipelineShortlists[r.sessionId] ?? r.shortlistStatus ?? "pending") === "pending").length,
+        };
+
+        return (
+          <div className="space-y-6">
+            {/* Pipeline Header */}
+            <div className="relative rounded-3xl border border-violet-500/20 bg-gradient-to-r from-[#0d0e24]/95 via-[#0b0c21]/95 to-[#070814]/95 backdrop-blur-2xl p-6 sm:p-8 shadow-2xl shadow-violet-950/30 overflow-hidden">
+              <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-violet-500/50 to-transparent" />
+              <div className="absolute top-0 right-1/4 w-80 h-32 bg-violet-500/8 rounded-full blur-3xl pointer-events-none" />
+              <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-5">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide bg-violet-950/80 text-violet-300 border border-violet-700/40 shadow-inner">
+                      <Users className="h-3.5 w-3.5 text-violet-400" />
+                      Talent Acquisition Pipeline
+                    </span>
+                    {user?.name && (
+                      <Badge variant="success" className="text-[11px]">
+                        <ShieldCheck className="h-3 w-3 mr-1" />
+                        {user.name}
+                      </Badge>
+                    )}
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                    Candidate Evaluation Pipeline
+                  </h2>
+                  <p className="text-sm text-slate-300 max-w-xl leading-relaxed">
+                    Review AI-verified evaluation reports, manage shortlist decisions, and track candidate readiness across all completed interview sessions.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0">
+                  {(["shortlisted", "under-review", "pending", "rejected"] as const).map((s) => (
+                    <div key={s} className="rounded-xl border border-[#1e2d4f] bg-[#0a0f1d] p-3 text-center">
+                      <p className={`text-xl font-extrabold font-mono ${statusMeta[s].color}`}>{pipelineCounts[s]}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5 capitalize">{statusMeta[s].label}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Pipeline Filter Bar */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="flex items-center gap-1.5 text-xs text-slate-400 font-medium mr-1">
+                <Filter className="h-3.5 w-3.5" /> Filter:
+              </span>
+              {(["all", "shortlisted", "under-review", "pending", "rejected"] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setPipelineFilter(f)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                    pipelineFilter === f
+                      ? "bg-violet-600 text-white border-violet-500 shadow-md"
+                      : "bg-[#0a0f1d] text-slate-400 border-[#1e2d4f] hover:border-violet-700/50 hover:text-slate-200"
+                  }`}
+                >
+                  {f !== "all" && statusMeta[f].icon}
+                  {f === "all" ? `All (${pipelineCounts.all})` : `${statusMeta[f].label} (${pipelineCounts[f]})`}
+                </button>
+              ))}
+            </div>
+
+            {/* Candidate Cards */}
+            {filteredReports.length === 0 ? (
+              <Card className="p-10 text-center">
+                <div className="h-12 w-12 rounded-2xl bg-violet-950/70 border border-violet-800/40 flex items-center justify-center text-violet-400 mx-auto mb-4">
+                  <Users className="h-6 w-6" />
+                </div>
+                <h3 className="text-base font-bold text-white mb-1">No candidates in this filter</h3>
+                <p className="text-xs text-slate-400">Change the filter above to see other pipeline stages.</p>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {filteredReports.map((rep) => {
+                  const effectiveStatus = (pipelineShortlists[rep.sessionId] ?? rep.shortlistStatus ?? "pending") as string;
+                  const meta = statusMeta[effectiveStatus] ?? statusMeta["pending"];
+                  const verdictColor = rep.overallScore >= 88 ? "text-emerald-400" : rep.overallScore >= 72 ? "text-indigo-400" : "text-amber-400";
+
+                  return (
+                    <Card key={rep.sessionId} className="hover:border-violet-700/60 transition-all bg-[#0c1120]/95">
+                      <div className="p-5">
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                          {/* Left: Candidate Info */}
+                          <div className="flex items-start gap-4 flex-1 min-w-0">
+                            <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-violet-600/30 to-indigo-700/30 border border-violet-800/40 flex items-center justify-center text-violet-300 font-bold text-lg shrink-0">
+                              {rep.candidateName.charAt(0)}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2 mb-1">
+                                <span className="font-bold text-white text-base">{rep.candidateName}</span>
+                                <Badge variant={rep.overallScore >= 88 ? "success" : rep.overallScore >= 72 ? "indigo" : "default"} className="text-[11px]">
+                                  {rep.overallScore}% Score
+                                </Badge>
+                                <span className={`flex items-center gap-1 text-[11px] font-medium ${meta.color}`}>
+                                  {meta.icon} {meta.label}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-400">
+                                {rep.targetRole} • {rep.experienceLevel} • {rep.durationMinutes} min • {rep.completedAt}
+                              </p>
+                              <p className={`text-xs mt-1 font-medium ${verdictColor}`}>
+                                {rep.verdict}
+                              </p>
+                              {rep.metrics.slice(0, 3).length > 0 && (
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                  {rep.metrics.slice(0, 3).map((m) => (
+                                    <span key={m.category} className="inline-flex items-center gap-1 text-[10px] bg-[#0a0f1d] border border-[#1e2d4f] rounded-md px-2 py-0.5 text-slate-300 font-medium">
+                                      {m.category}: <span className="text-indigo-400 font-mono">{m.score}%</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Right: Actions */}
+                          <div className="flex flex-col sm:flex-row lg:flex-col xl:flex-row items-start sm:items-center gap-3 shrink-0">
+                            {/* Status Selector */}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {(["shortlisted", "under-review", "pending", "rejected"] as const).map((s) => (
+                                <button
+                                  key={s}
+                                  title={statusMeta[s].label}
+                                  onClick={() => handlePipelineStatusChange(rep.sessionId, rep.candidateName, s)}
+                                  className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold border transition-all ${
+                                    effectiveStatus === s
+                                      ? s === "shortlisted" ? "bg-emerald-600 text-white border-emerald-500"
+                                        : s === "under-review" ? "bg-amber-600 text-white border-amber-500"
+                                        : s === "rejected" ? "bg-rose-700 text-white border-rose-500"
+                                        : "bg-slate-700 text-white border-slate-500"
+                                      : "bg-[#0a0f1d] text-slate-400 border-[#1e2d4f] hover:text-slate-200 hover:border-violet-700/50"
+                                  }`}
+                                >
+                                  <span className={effectiveStatus === s ? "" : statusMeta[s].color}>
+                                    {statusMeta[s].icon}
+                                  </span>
+                                  <span className="hidden sm:inline">{statusMeta[s].label}</span>
+                                </button>
+                              ))}
+                            </div>
+                            <Link href={`/report/${rep.sessionId}`}>
+                              <Button size="sm" variant="secondary" className="gap-1.5 text-xs whitespace-nowrap h-8">
+                                <FileText className="h-3.5 w-3.5 text-indigo-400" />
+                                Full Report
+                                <ChevronRight className="h-3 w-3 text-slate-500" />
+                              </Button>
+                            </Link>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Pipeline Footer Note */}
+            <p className="text-[11px] text-center text-slate-500">
+              Shortlist decisions are saved locally and reflected in candidate reports. Evaluated by InterviewIQ Gemini AI Engine.
+            </p>
+          </div>
+        );
+      })()}
     </div>
   );
 }

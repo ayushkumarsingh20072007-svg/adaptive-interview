@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Sparkles, ArrowRight, Lock, Mail, AlertCircle, ArrowLeft } from "lucide-react";
+import { Sparkles, ArrowRight, Lock, Mail, AlertCircle, ArrowLeft, LogOut, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,18 +13,11 @@ import { useAuth } from "@/lib/auth-context";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, logout } = useAuth();
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-
-  // If already logged in, redirect to dashboard
-  React.useEffect(() => {
-    if (user) {
-      router.push("/dashboard");
-    }
-  }, [user, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,6 +52,64 @@ export default function LoginPage() {
       setIsSubmitting(false);
     }
   };
+
+  if (user) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-14rem)] py-8 px-4">
+        <div className="w-full max-w-md space-y-6">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            <span>Back to Landing Page</span>
+          </Link>
+
+          <Card className="border-[#1e2d4f] bg-[#0c1222] shadow-2xl shadow-indigo-950/40 p-6 text-center space-y-5">
+            <div className="flex h-12 w-12 mx-auto items-center justify-center rounded-2xl bg-indigo-950 border border-indigo-700/50 text-indigo-400">
+              <UserCheck className="h-6 w-6" />
+            </div>
+
+            <div>
+              <Badge variant="success" className="mb-2">Currently Signed In</Badge>
+              <h2 className="text-xl font-bold text-white">Active Session Detected</h2>
+              <p className="text-xs text-slate-400 mt-1">
+                You are currently signed in as <strong className="text-white">{user.name}</strong> ({user.email}).
+              </p>
+              <p className="text-[11px] text-indigo-300 font-mono mt-1 capitalize">
+                Account Role: {user.role}
+              </p>
+            </div>
+
+            <div className="space-y-2.5 pt-2">
+              <Link href="/dashboard" className="block">
+                <Button className="w-full justify-center gap-2 h-10">
+                  Continue to Dashboard
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  await logout();
+                }}
+                className="w-full justify-center gap-2 text-rose-300 border-rose-900/50 hover:bg-rose-950/40 hover:text-white h-10"
+              >
+                <LogOut className="h-4 w-4 text-rose-400" />
+                Log Out of Account
+              </Button>
+            </div>
+
+            <div className="pt-2 border-t border-[#1a2642]">
+              <p className="text-[11px] text-slate-500">
+                Want to sign in with different credentials? Click <strong>Log Out of Account</strong> above.
+              </p>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-14rem)] py-8 px-4">
