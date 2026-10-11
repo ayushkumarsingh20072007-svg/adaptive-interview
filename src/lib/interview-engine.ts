@@ -21,6 +21,7 @@ export function initializeInterviewSession(setup: CandidateSetup): InterviewSess
     durationSeconds: 0,
     answers: [],
     currentQuestionIndex: 0,
+    userId: setup.userId,
   };
 
   saveStoredSession(initialSession);
@@ -247,6 +248,7 @@ export function generateEvaluationReport(session: InterviewSession): EvaluationR
     actionableRoadmap,
     answerRecords: answers,
     isDemoSimulation: true,
+    userId: session.setup.userId || session.userId,
   };
 
   saveStoredReport(report);

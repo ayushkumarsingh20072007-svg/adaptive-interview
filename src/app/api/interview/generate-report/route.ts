@@ -1,15 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { callGemini, parseGeminiJson } from "@/lib/gemini";
 import { InterviewSession, EvaluationReport, SkillMetric } from "@/lib/types";
+import { resolveRequestUser } from "@/lib/resolve-user";
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = resolveRequestUser(req);
     const body = await req.json();
     const session: InterviewSession = body.session;
 
     if (!session) {
       return NextResponse.json({ error: "Missing session data" }, { status: 400 });
     }
+
+    // Never trust client-supplied userId: only authenticate via server session cookie
+    const effectiveUserId = auth.authenticated && auth.user ? auth.user.id : undefined;
 
     const answers = session.answers;
     const totalAnswers = answers.length;
@@ -108,6 +113,7 @@ Respond ONLY with valid JSON (no markdown, no code fences):
       actionableRoadmap: (aiReport.actionableRoadmap || []).slice(0, 4),
       answerRecords: session.answers,
       isDemoSimulation: false,
+      userId: effectiveUserId,
     };
 
     return NextResponse.json({ report });

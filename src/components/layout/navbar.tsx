@@ -3,19 +3,20 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sparkles, Menu, X, ArrowRight } from "lucide-react";
+import { Sparkles, Menu, X, ArrowRight, LogIn, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 
 export function Navbar() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const { user, isLoading, logout } = useAuth();
 
   const navLinks = [
-    { href: "/#features", label: "Features" },
     { href: "/#how-it-works", label: "How It Works" },
-    { href: "/#about", label: "About" },
+    { href: "/#tracks", label: "Tracks" },
     { href: "/dashboard", label: "Dashboard" },
   ];
 
@@ -38,7 +39,7 @@ export function Navbar() {
             </div>
           </Link>
           <div className="hidden sm:block ml-2">
-            <Badge variant="indigo">Hackathon Demo</Badge>
+            <Badge variant="indigo">Production Demo</Badge>
           </div>
         </div>
 
@@ -65,14 +66,41 @@ export function Navbar() {
 
         {/* Right Action buttons */}
         <div className="hidden sm:flex items-center gap-3">
-          <Link href="/dashboard">
-            <Button variant="ghost" size="sm" className="text-slate-300">
-              Demo Portal
-            </Button>
-          </Link>
+          {!isLoading && user ? (
+            <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#141e34] border border-[#1e2d4f] text-xs text-slate-200">
+                <User className="h-3.5 w-3.5 text-indigo-400" />
+                <span className="max-w-[120px] truncate font-medium">{user.name}</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => logout()}
+                className="text-xs text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 gap-1"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span>Log Out</span>
+              </Button>
+            </div>
+          ) : !isLoading ? (
+            <div className="flex items-center gap-2">
+              <Link href="/login">
+                <Button variant="ghost" size="sm" className="text-slate-300 hover:text-white text-xs">
+                  <LogIn className="h-3.5 w-3.5 mr-1 text-slate-400" />
+                  Sign In
+                </Button>
+              </Link>
+              <Link href="/signup">
+                <Button variant="outline" size="sm" className="text-xs border-[#22304e] hover:border-indigo-600/60">
+                  Get Started
+                </Button>
+              </Link>
+            </div>
+          ) : null}
+
           <Link href="/setup">
-            <Button size="sm" className="gap-2 shadow-sm">
-              Start Your Interview
+            <Button size="sm" className="gap-2 shadow-sm bg-indigo-600 hover:bg-indigo-500">
+              Start Interview
               <ArrowRight className="h-3.5 w-3.5" />
             </Button>
           </Link>
@@ -81,7 +109,7 @@ export function Navbar() {
         {/* Mobile Hamburger Button */}
         <div className="flex items-center md:hidden gap-2">
           <Link href="/setup">
-            <Button size="sm" className="text-xs px-2.5 h-8">
+            <Button size="sm" className="text-xs px-2.5 h-8 bg-indigo-600 hover:bg-indigo-500">
               Start
             </Button>
           </Link>
@@ -110,10 +138,44 @@ export function Navbar() {
               </Link>
             ))}
           </div>
+
           <div className="pt-2 border-t border-[#1e2d4f] flex flex-col gap-2">
+            {!isLoading && user ? (
+              <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-[#141e34] border border-[#1e2d4f]">
+                <div className="text-xs">
+                  <p className="font-semibold text-white">{user.name}</p>
+                  <p className="text-slate-400 text-[11px] truncate">{user.email}</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    logout();
+                    setMobileMenuOpen(false);
+                  }}
+                  className="text-xs text-rose-400 hover:bg-rose-950/40"
+                >
+                  Log Out
+                </Button>
+              </div>
+            ) : !isLoading ? (
+              <div className="grid grid-cols-2 gap-2">
+                <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
+                  <Button variant="outline" className="w-full text-xs justify-center">
+                    Sign In
+                  </Button>
+                </Link>
+                <Link href="/signup" onClick={() => setMobileMenuOpen(false)}>
+                  <Button variant="secondary" className="w-full text-xs justify-center">
+                    Get Started
+                  </Button>
+                </Link>
+              </div>
+            ) : null}
+
             <Link href="/setup" onClick={() => setMobileMenuOpen(false)}>
-              <Button className="w-full gap-2 justify-center">
-                Start Your Interview
+              <Button className="w-full gap-2 justify-center bg-indigo-600 hover:bg-indigo-500">
+                Start Interview
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>

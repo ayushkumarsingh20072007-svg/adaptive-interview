@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { callGemini, parseGeminiJson } from "@/lib/gemini";
 import { Question, AnswerFeedback } from "@/lib/types";
+import { resolveRequestUser } from "@/lib/resolve-user";
 
 export async function POST(req: NextRequest) {
   try {
+    void resolveRequestUser(req);
     const body = await req.json();
     const question: Question = body.question;
     const answerText: string = body.answerText;

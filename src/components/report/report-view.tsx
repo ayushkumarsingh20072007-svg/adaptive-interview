@@ -14,6 +14,9 @@ import {
   BrainCircuit,
   ChevronDown,
   ChevronUp,
+  ShieldAlert,
+  FileQuestion,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -22,8 +25,9 @@ import { Progress } from "@/components/ui/progress";
 import { SAMPLE_REPORT } from "@/lib/mock-data";
 import { getStoredReport, getStoredSetup } from "@/lib/storage";
 import { initializeInterviewSession } from "@/lib/interview-engine";
-
+import { useAuth } from "@/lib/auth-context";
 import { useIsMounted } from "@/lib/use-mounted";
+import { EvaluationReport } from "@/lib/types";
 
 interface ReportViewProps {
   sessionId: string;
@@ -32,19 +36,115 @@ interface ReportViewProps {
 export function ReportView({ sessionId }: ReportViewProps) {
   const router = useRouter();
   const isMounted = useIsMounted();
+  const { user, isLoading } = useAuth();
 
-  const report = React.useMemo(() => {
-    if (!isMounted) return SAMPLE_REPORT;
-    return getStoredReport(sessionId) || SAMPLE_REPORT;
-  }, [isMounted, sessionId]);
+  const reportState = React.useMemo<{
+    status: "loading" | "ok" | "not_found" | "forbidden";
+    report: EvaluationReport;
+  }>(() => {
+    if (!isMounted || isLoading) {
+      return { status: "loading", report: SAMPLE_REPORT };
+    }
+    if (sessionId === "demo-session") {
+      return { status: "ok", report: SAMPLE_REPORT };
+    }
+    const stored = getStoredReport(sessionId);
+    if (!stored) {
+      return { status: "not_found", report: SAMPLE_REPORT };
+    }
+    // Check ownership if report is tied to a user account
+    if (stored.userId && stored.userId !== "guest") {
+      if (!user || user.id !== stored.userId) {
+        return { status: "forbidden", report: stored };
+      }
+    }
+    return { status: "ok", report: stored };
+  }, [isMounted, isLoading, sessionId, user]);
+
+  const report = reportState.report;
 
   const [expandedQuestion, setExpandedQuestion] = React.useState<string | null>(null);
   const currentExpandedId = expandedQuestion ?? report.answerRecords[0]?.questionId ?? null;
 
   function handleRetakeInterview() {
-    const setup = getStoredSetup();
+    const setup = getStoredSetup(user?.id);
     const newSession = initializeInterviewSession(setup);
     router.push(`/interview/${newSession.id}`);
+  }
+
+  if (reportState.status === "loading") {
+    return (
+      <div className="flex flex-col items-center justify-center p-16 text-center text-slate-400">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-400 mb-3" />
+        <p className="text-sm">Synthesizing candidate report...</p>
+      </div>
+    );
+  }
+
+  if (reportState.status === "not_found") {
+    return (
+      <div className="flex flex-col items-center justify-center max-w-md mx-auto py-20 text-center space-y-4">
+        <div className="h-14 w-14 rounded-2xl bg-[#141e34] border border-[#1e2d4f] flex items-center justify-center text-slate-400">
+          <FileQuestion className="h-7 w-7 text-indigo-400" />
+        </div>
+        <div className="space-y-1">
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <Badge variant="outline">404 Not Found</Badge>
+          </div>
+          <h2 className="text-xl font-bold text-white">Evaluation Report Not Found</h2>
+          <p className="text-sm text-slate-400">
+            No report was found matching session reference <code className="text-indigo-300 font-mono text-xs">{sessionId}</code>.
+          </p>
+        </div>
+        <div className="flex items-center gap-3 pt-2">
+          <Link href="/dashboard">
+            <Button variant="secondary" size="sm" className="gap-2">
+              <LayoutDashboard className="h-4 w-4" />
+              Dashboard
+            </Button>
+          </Link>
+          <Link href="/setup">
+            <Button size="sm" className="gap-2">
+              <RefreshCw className="h-3.5 w-3.5" />
+              Start Interview
+            </Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (reportState.status === "forbidden") {
+    return (
+      <div className="flex flex-col items-center justify-center max-w-md mx-auto py-20 text-center space-y-4">
+        <div className="h-14 w-14 rounded-2xl bg-rose-950/40 border border-rose-800/60 flex items-center justify-center text-rose-400">
+          <ShieldAlert className="h-7 w-7" />
+        </div>
+        <div className="space-y-1">
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <Badge variant="danger">403 Access Denied</Badge>
+            <Badge variant="default">Confidential Record</Badge>
+          </div>
+          <h2 className="text-xl font-bold text-white">Private Evaluation Report</h2>
+          <p className="text-sm text-slate-400">
+            This candidate evaluation report belongs to an authenticated user account. You do not have permission to view or modify this report.
+          </p>
+        </div>
+        <div className="flex items-center gap-3 pt-2">
+          <Link href="/login">
+            <Button size="sm" className="gap-2">
+              Sign In with Account
+            </Button>
+          </Link>
+          <Link href="/dashboard">
+            <Button variant="secondary" size="sm" className="gap-2">
+              <LayoutDashboard className="h-4 w-4" />
+              Return to Dashboard
+            </Button>
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   const isStrong = report.overallScore >= 88;

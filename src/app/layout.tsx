@@ -15,6 +15,8 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+import { AuthProvider } from "@/lib/auth-context";
+
 export const metadata: Metadata = {
   title: "InterviewIQ — Adaptive Interview Intelligence",
   description:
@@ -32,13 +34,15 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
     >
       <body className="min-h-full flex flex-col bg-[#0c1222] text-slate-100 font-sans selection:bg-indigo-500/30 selection:text-indigo-200">
-        <Suspense fallback={<header className="h-16 w-full border-b border-[#1e2d4f] bg-[#0c1222]" />}>
-          <Navbar />
-        </Suspense>
-        <main className="flex-1 w-full mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 flex flex-col">
-          {children}
-        </main>
-        <Footer />
+        <AuthProvider>
+          <Suspense fallback={<header className="h-16 w-full border-b border-[#1e2d4f] bg-[#0c1222]" />}>
+            <Navbar />
+          </Suspense>
+          <main className="flex-1 w-full mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 flex flex-col">
+            {children}
+          </main>
+          <Footer />
+        </AuthProvider>
       </body>
     </html>
   );

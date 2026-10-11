@@ -26,9 +26,11 @@ import {
 } from "@/lib/types";
 import { ROLE_LABELS, ROLE_SKILLS, SAMPLE_CANDIDATE } from "@/lib/mock-data";
 import { saveStoredSetup, getStoredSetup } from "@/lib/storage";
+import { useAuth } from "@/lib/auth-context";
 
 export default function CandidateSetupPage() {
   const router = useRouter();
+  const { user } = useAuth();
 
   // Initialize state with static defaults for SSR, hydrate in useEffect
   const [candidateName, setCandidateName] = React.useState<string>("");
@@ -46,7 +48,11 @@ export default function CandidateSetupPage() {
     const existing = getStoredSetup();
     if (!existing) return;
     requestAnimationFrame(() => {
-      if (existing.candidateName) setCandidateName(existing.candidateName);
+      if (existing.candidateName) {
+        setCandidateName(existing.candidateName);
+      } else if (user?.name) {
+        setCandidateName(user.name);
+      }
       if (existing.targetRole) setTargetRole(existing.targetRole);
       if (existing.experienceLevel) setExperienceLevel(existing.experienceLevel);
       if (existing.interviewFocus) setInterviewFocus(existing.interviewFocus);
@@ -59,7 +65,7 @@ export default function CandidateSetupPage() {
         });
       }
     });
-  }, []);
+  }, [user]);
 
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -139,7 +145,7 @@ export default function CandidateSetupPage() {
     setIsSubmitting(true);
 
     const setupData: CandidateSetup = {
-      candidateName: candidateName.trim() || "Candidate",
+      candidateName: candidateName.trim() || (user ? user.name : "Candidate"),
       targetRole,
       experienceLevel,
       interviewFocus,
@@ -149,6 +155,7 @@ export default function CandidateSetupPage() {
       isSampleResume: resumeFile?.isSample ?? false,
       skills: ROLE_SKILLS[targetRole] || [],
       createdAt: new Date().toISOString(),
+      userId: user?.id,
     };
 
     saveStoredSetup(setupData);
@@ -192,7 +199,33 @@ export default function CandidateSetupPage() {
         </Link>
       </div>
 
+      {/* Auth or Guest Mode Notification Banner */}
+      {user ? (
+        <div className="rounded-lg border border-emerald-800/60 bg-emerald-950/20 px-4 py-2.5 text-xs text-emerald-300 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            <span>
+              Signed in as <strong className="text-white">{user.name}</strong> ({user.email}). Your interview results will link to your account.
+            </span>
+          </div>
+          <Badge variant="success">Authenticated</Badge>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-[#1e2d4f] bg-[#0c1222]/80 px-4 py-2.5 text-xs text-slate-300 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-amber-400/80" />
+            <span>
+              <strong>Guest / Demo Mode:</strong> Running interview locally in browser. No login required.
+            </span>
+          </div>
+          <Link href="/login" className="text-indigo-400 hover:text-indigo-300 font-medium underline underline-offset-4">
+            Sign In to save permanently
+          </Link>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
         {/* Left Column: Form Controls */}
         <div className="lg:col-span-2 space-y-6">
           {/* Card 1: Identity & Resume */}

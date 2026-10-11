@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { callGemini, parseGeminiJson } from "@/lib/gemini";
 import { Question, AnswerRecord, CandidateSetup } from "@/lib/types";
+import { resolveRequestUser } from "@/lib/resolve-user";
 
 export async function POST(req: NextRequest) {
   try {
+    void resolveRequestUser(req);
     const body = await req.json();
     const setup: CandidateSetup = body.setup;
     const lastQuestion: Question = body.lastQuestion;

@@ -25,6 +25,7 @@ import {
   InterviewSession,
   AnswerRecord,
   AnswerFeedback,
+  EvaluationReport,
 } from "@/lib/types";
 import { ROLE_LABELS, SAMPLE_CANDIDATE } from "@/lib/mock-data";
 import {
@@ -42,6 +43,7 @@ import {
 
 import { evaluateAnswer as mockEvaluate, getNextAdaptiveQuestion as mockNextQ, getInitialQuestion as mockInitQ } from "@/lib/interview-engine";
 import { useIsMounted } from "@/lib/use-mounted";
+import { useAuth } from "@/lib/auth-context";
 
 interface InterviewWorkspaceProps {
   sessionId: string;
@@ -51,6 +53,7 @@ type AiStatus = "loading" | "ready" | "evaluating" | "branching" | "finishing" |
 
 export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
   const router = useRouter();
+  const { user } = useAuth();
 
   // Core session state
   const [session, setSession] = React.useState<InterviewSession>(() => {
@@ -65,6 +68,7 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
       durationSeconds: 0,
       answers: [],
       currentQuestionIndex: 0,
+      userId: setup.userId,
     };
     saveStoredSession(newSession);
     return newSession;
@@ -303,7 +307,7 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
     saveStoredSession(targetSession);
 
     try {
-      let report;
+      let report: EvaluationReport;
       if (isAiPowered && targetSession.answers.length > 0) {
         report = await aiGenerateReport(targetSession);
       } else {
@@ -311,11 +315,17 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
         const { generateEvaluationReport } = await import("@/lib/interview-engine");
         report = generateEvaluationReport(targetSession);
       }
+      if (user?.id && !report.userId) {
+        report.userId = user.id;
+      }
       saveStoredReport(report);
     } catch (err) {
       console.error("Report generation error:", err);
       const { generateEvaluationReport } = await import("@/lib/interview-engine");
       const report = generateEvaluationReport(targetSession);
+      if (user?.id && !report.userId) {
+        report.userId = user.id;
+      }
       saveStoredReport(report);
     }
 

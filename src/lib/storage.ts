@@ -1,5 +1,5 @@
 import { CandidateSetup, InterviewSession, EvaluationReport } from "./types";
-import { SAMPLE_CANDIDATE, SAMPLE_REPORT } from "./mock-data";
+import { SAMPLE_CANDIDATE } from "./mock-data";
 
 const STORAGE_KEYS = {
   SETUP: "interviewiq_candidate_setup",
@@ -7,10 +7,11 @@ const STORAGE_KEYS = {
   COMPLETED_REPORTS: "interviewiq_evaluation_reports",
 };
 
-export function getStoredSetup(): CandidateSetup {
+export function getStoredSetup(userId?: string | null): CandidateSetup {
   if (typeof window === "undefined") return SAMPLE_CANDIDATE;
   try {
-    const raw = localStorage.getItem(STORAGE_KEYS.SETUP);
+    const key = userId ? `${STORAGE_KEYS.SETUP}_${userId}` : STORAGE_KEYS.SETUP;
+    const raw = localStorage.getItem(key) || (!userId ? localStorage.getItem(STORAGE_KEYS.SETUP) : null);
     if (raw) return JSON.parse(raw);
   } catch (err) {
     console.error("Failed to load candidate setup from storage", err);
@@ -21,6 +22,9 @@ export function getStoredSetup(): CandidateSetup {
 export function saveStoredSetup(setup: CandidateSetup): void {
   if (typeof window === "undefined") return;
   try {
+    if (setup.userId) {
+      localStorage.setItem(`${STORAGE_KEYS.SETUP}_${setup.userId}`, JSON.stringify(setup));
+    }
     localStorage.setItem(STORAGE_KEYS.SETUP, JSON.stringify(setup));
   } catch (err) {
     console.error("Failed to save candidate setup to storage", err);
@@ -67,15 +71,31 @@ export function saveStoredReport(report: EvaluationReport): void {
   }
 }
 
-export function getAllReports(): EvaluationReport[] {
-  if (typeof window === "undefined") return [SAMPLE_REPORT];
+export function getAllReports(userId?: string | null): EvaluationReport[] {
+  if (typeof window === "undefined") return [];
   try {
     const reports: EvaluationReport[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (key && key.startsWith(STORAGE_KEYS.COMPLETED_REPORTS)) {
         const item = localStorage.getItem(key);
-        if (item) reports.push(JSON.parse(item));
+        if (item) {
+          try {
+            const parsed: EvaluationReport = JSON.parse(item);
+            if (userId) {
+              if (parsed.userId === userId) {
+                reports.push(parsed);
+              }
+            } else {
+              // Guest mode: only show reports not owned by any registered user
+              if (!parsed.userId || parsed.userId === "guest") {
+                reports.push(parsed);
+              }
+            }
+          } catch {
+            // Ignore malformed entries
+          }
+        }
       }
     }
     if (reports.length > 0) {
@@ -84,5 +104,5 @@ export function getAllReports(): EvaluationReport[] {
   } catch (err) {
     console.error("Failed to list reports from storage", err);
   }
-  return [SAMPLE_REPORT];
+  return [];
 }

@@ -4,116 +4,189 @@ import {
   Sparkles,
   FileText,
   BrainCircuit,
-  ShieldCheck,
   CheckCircle2,
   Terminal,
   LineChart,
   Layers,
+  Code2,
+  Cpu,
+  LogIn,
+  UserPlus,
+  Compass,
+  Check,
+  XCircle,
+  HelpCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
 export default function HomePage() {
   return (
     <div className="flex flex-col gap-20 py-4 sm:py-8">
       {/* 1. HERO SECTION */}
-      <section className="flex flex-col items-center text-center gap-6 max-w-4xl mx-auto pt-6 pb-2">
-        <div className="inline-flex items-center gap-2 rounded-full border border-indigo-800/60 bg-indigo-950/40 px-3 py-1 text-xs font-medium text-indigo-300">
-          <Sparkles className="h-3.5 w-3.5" />
-          <span>Next-Generation Technical Interview Simulation</span>
+      <section className="relative flex flex-col items-center text-center gap-6 max-w-5xl mx-auto pt-6 pb-4">
+        {/* Subtle radial ambient background glow */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[320px] bg-gradient-to-tr from-indigo-600/15 via-violet-600/20 to-transparent blur-3xl pointer-events-none -z-10 rounded-full" />
+
+        {/* Top Innovation Pill */}
+        <div className="inline-flex items-center gap-2 rounded-full border border-indigo-800/60 bg-indigo-950/50 px-4 py-1.5 text-xs font-medium text-indigo-300 shadow-inner">
+          <Sparkles className="h-3.5 w-3.5 text-indigo-400 animate-pulse" />
+          <span>Production AI Technical Interview Simulation</span>
+          <span className="hidden sm:inline text-indigo-600">|</span>
+          <span className="hidden sm:inline text-indigo-400/80">Adaptive Branching Engine</span>
         </div>
 
-        <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-white leading-tight">
-          Your Skills. Your Interview. <br className="hidden sm:inline" />
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-violet-400 to-indigo-300">
-            Your Next Breakthrough.
+        {/* Hero Headline */}
+        <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight text-white leading-[1.1]">
+          Master Technical Interviews <br className="hidden sm:inline" />
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-violet-400 to-indigo-200">
+            With Adaptive AI Rigor.
           </span>
         </h1>
 
-        <p className="text-base sm:text-lg text-slate-300 max-w-2xl leading-relaxed">
-          Practice technical interviews that adapt to your answers, uncover knowledge gaps, and deliver actionable feedback.
+        {/* Hero Value Subtitle */}
+        <p className="text-base sm:text-lg md:text-xl text-slate-300 max-w-3xl leading-relaxed">
+          InterviewIQ analyzes your resume, asks role-specific engineering questions, and dynamically drills into your answers—generating an evidence-backed scorecard with exact quotes and knowledge gap analysis.
         </p>
 
-        {/* Hero CTAs */}
-        <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
+        {/* Hero Action CTAs */}
+        <div className="flex flex-wrap items-center justify-center gap-3.5 pt-3">
           <Link href="/setup">
-            <Button size="lg" className="gap-2.5 h-12 px-6 shadow-lg shadow-indigo-950/70">
-              Start Your Interview
+            <Button size="lg" className="gap-2.5 h-12 px-7 shadow-lg shadow-indigo-950/80 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-semibold">
+              Start Free Interview
               <ArrowRight className="h-4 w-4" />
             </Button>
           </Link>
-          <a href="#how-it-works">
-            <Button variant="secondary" size="lg" className="h-12 px-6">
-              Explore How It Works
+          <Link href="/signup">
+            <Button variant="secondary" size="lg" className="gap-2 h-12 px-6 border-[#2a3c63] hover:border-indigo-500/50">
+              <UserPlus className="h-4 w-4 text-violet-400" />
+              Get Started
             </Button>
-          </a>
+          </Link>
+          <Link href="/login">
+            <Button variant="outline" size="lg" className="gap-2 h-12 px-5 text-slate-300 hover:text-white border-[#1e2d4f]">
+              <LogIn className="h-4 w-4 text-slate-400" />
+              Sign In
+            </Button>
+          </Link>
         </div>
 
-        {/* Polished Product Interface Preview Mockup */}
-        <div className="w-full mt-8 rounded-2xl border border-[#1e2d4f] bg-[#0c1222] p-2 sm:p-4 shadow-2xl shadow-indigo-950/40 text-left">
+        {/* Frictionless indicator */}
+        <p className="text-xs text-slate-400 flex items-center justify-center gap-3 pt-1">
+          <span className="flex items-center gap-1.5">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Instant guest demo available
+          </span>
+          <span>•</span>
+          <span className="flex items-center gap-1.5">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> No credit card required
+          </span>
+          <span>•</span>
+          <span className="flex items-center gap-1.5">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Private & local-ready
+          </span>
+        </p>
+
+        {/* Real-time Technical Interview Simulation Showcase */}
+        <div className="w-full mt-6 rounded-2xl border border-[#1e2d4f] bg-[#0c1222] p-2.5 sm:p-4 shadow-2xl shadow-indigo-950/50 text-left">
           <div className="rounded-xl border border-[#1e2d4f]/80 bg-[#10182b] overflow-hidden">
-            {/* Mock Header */}
-            <div className="flex items-center justify-between border-b border-[#1a2642] px-4 py-3 bg-[#0c1222]/60">
+            {/* Terminal Top Bar */}
+            <div className="flex items-center justify-between border-b border-[#1a2642] px-4 py-3 bg-[#0c1222]/80">
               <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-rose-500/80" />
-                <span className="h-2.5 w-2.5 rounded-full bg-amber-500/80" />
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500/80" />
+                <span className="h-2.5 w-2.5 rounded-full bg-rose-500/90" />
+                <span className="h-2.5 w-2.5 rounded-full bg-amber-500/90" />
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500/90" />
                 <span className="ml-2 text-xs font-mono text-slate-400">
-                  live-session // Senior Full-Stack Engineer
+                  interviewiq-engine // live-session #782-arch
                 </span>
               </div>
-              <Badge variant="indigo">Adaptive Calibration Active</Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="indigo">Resume-Calibrated: Staff / Senior</Badge>
+                <span className="hidden sm:inline-flex h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+              </div>
             </div>
 
-            {/* Mock Body */}
+            {/* Terminal Body */}
             <div className="p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Question & Candidate Response Preview */}
+              {/* Question & Candidate Response Analysis */}
               <div className="lg:col-span-2 space-y-4">
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <Badge variant="indigo">Question 2 of 4</Badge>
-                    <span className="text-xs text-slate-400 font-mono">System Architecture</span>
+                    <span className="text-xs text-slate-400 font-mono">Distributed Systems & Reliability</span>
                   </div>
                   <h4 className="text-sm sm:text-base font-semibold text-slate-100">
-                    How do you handle lock expiration during network partitions in a distributed cache layer?
+                    &quot;How do you prevent split-brain anomalies and stale reads when a leader node experiences prolonged garbage collection in your Raft cluster?&quot;
                   </h4>
                 </div>
 
-                <div className="rounded-lg border border-[#1e2d4f] bg-[#070b14] p-3 text-xs text-slate-300 font-mono leading-relaxed">
-                  <p className="text-slate-500">{/* Candidate response analysis */}Candidate verified response:</p>
-                  <p className="mt-1 text-slate-200">
-                    &quot;To resolve split-brain execution when a lease expires during prolonged GC, I implement fencing tokens—monotonically incremented epoch numbers verified on every storage write.&quot;
+                <div className="rounded-lg border border-[#1e2d4f] bg-[#070b14] p-3.5 text-xs text-slate-300 font-mono leading-relaxed space-y-2">
+                  <div className="flex items-center justify-between text-slate-500 text-[11px] border-b border-[#1a2642] pb-1.5">
+                    <span>CANDIDATE SUBMITTED EXPLANATION</span>
+                    <span className="text-emerald-400 font-sans">Answer Recorded</span>
+                  </div>
+                  <p className="text-slate-200">
+                    &quot;To avoid split-brain execution during prolonged stop-the-world pauses, I configure <span className="text-indigo-400 font-semibold underline decoration-indigo-500/60">lease read mechanisms</span> with pre-vote stages and <span className="text-indigo-400 font-semibold underline decoration-indigo-500/60">fencing tokens</span>. Any state mutation verifies the epoch token against the storage boundary before committing.&quot;
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2 text-xs text-emerald-400">
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span>Demonstrated mastery: Fencing tokens, optimistic concurrency, and partition boundaries.</span>
+                {/* Adaptive follow-up box */}
+                <div className="rounded-lg border border-violet-900/60 bg-violet-950/20 p-3 space-y-1.5 text-xs">
+                  <div className="flex items-center gap-2 text-violet-300 font-semibold">
+                    <BrainCircuit className="h-4 w-4 text-violet-400" />
+                    <span>Dynamic Follow-Up (Triggered by mention of &quot;fencing tokens&quot;):</span>
+                  </div>
+                  <p className="text-slate-300 text-xs pl-6">
+                    &quot;You highlighted fencing tokens for storage validation. If a client receives a stale token during clock drift between cluster nodes, how does your storage backplane reject the write deterministically?&quot;
+                  </p>
                 </div>
               </div>
 
-              {/* Live Signal Badges Preview */}
-              <div className="rounded-lg border border-[#1e2d4f] bg-[#0c1222]/70 p-4 flex flex-col justify-between gap-3">
-                <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                  Adaptive Skill Signals
-                </span>
-                <div className="space-y-2 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Distributed State</span>
-                    <Badge variant="success">94% Mastery</Badge>
+              {/* Evidence & Competency Signal Sidebar */}
+              <div className="rounded-lg border border-[#1e2d4f] bg-[#0c1222]/80 p-4 flex flex-col justify-between gap-3">
+                <div>
+                  <div className="flex items-center justify-between pb-2 border-b border-[#1a2642]">
+                    <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                      Live Metric Rubric
+                    </span>
+                    <Badge variant="success">96% Confirmed</Badge>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Concurrency Bounds</span>
-                    <Badge variant="indigo">Proficient</Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Core Web Vitals</span>
-                    <Badge variant="default">Calibrating</Badge>
+                  <div className="space-y-3 pt-3 text-xs">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-slate-400">Consensus Guarantees</span>
+                        <span className="text-emerald-400 font-mono font-medium">Verified Mastery</span>
+                      </div>
+                      <div className="w-full bg-[#1a2642] h-1.5 rounded-full overflow-hidden">
+                        <div className="bg-emerald-500 h-full w-[94%]" />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-slate-400">Concurrency Bounds</span>
+                        <span className="text-indigo-400 font-mono font-medium">Strong Evidence</span>
+                      </div>
+                      <div className="w-full bg-[#1a2642] h-1.5 rounded-full overflow-hidden">
+                        <div className="bg-indigo-500 h-full w-[88%]" />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-slate-400">Fault Tolerance</span>
+                        <span className="text-violet-400 font-mono font-medium">In Depth</span>
+                      </div>
+                      <div className="w-full bg-[#1a2642] h-1.5 rounded-full overflow-hidden">
+                        <div className="bg-violet-500 h-full w-[82%]" />
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <div className="pt-2 border-t border-[#1a2642] text-[11px] text-slate-400">
-                  Adaptive follow-up generated based on candidate terminology.
+
+                <div className="pt-2 border-t border-[#1a2642] text-[11px] text-slate-400 leading-normal flex items-start gap-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>Evaluation scorecard cites candidate technical phrasing directly in the final report.</span>
                 </div>
               </div>
             </div>
@@ -121,197 +194,326 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 2. TRUST / CAPABILITY INDICATORS */}
-      <section className="border-y border-[#1a2642] py-8 bg-[#070b14]/40">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
-          <div className="space-y-1">
-            <p className="text-base font-bold text-white">Resume-Aware</p>
-            <p className="text-xs text-slate-400">Calibrates questions against your real background</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-base font-bold text-white">Dynamic Branching</p>
-            <p className="text-xs text-slate-400">Follow-up prompts adapt to your specific answers</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-base font-bold text-white">Evidence-Backed</p>
-            <p className="text-xs text-slate-400">Direct answer quotes support all scorecards</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-base font-bold text-white">Privacy Focused</p>
-            <p className="text-xs text-slate-400">No credential exposure or unnecessary file storage</p>
-          </div>
-        </div>
-      </section>
-
-      {/* 3. FEATURE SECTION */}
-      <section id="features" className="space-y-8 scroll-mt-20">
-        <div className="text-center max-w-2xl mx-auto space-y-2">
-          <Badge variant="indigo">Core Platform Capabilities</Badge>
-          <h2 className="text-2xl sm:text-3xl font-bold text-white">
-            Engineered for Realistic Technical Evaluation
+      {/* 2. THREE CORE PILLARS (THE PILLARS OF ADAPTIVE INTELLIGENCE) */}
+      <section className="space-y-8 scroll-mt-20">
+        <div className="text-center max-w-3xl mx-auto space-y-2">
+          <Badge variant="indigo">Architecture Principles</Badge>
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-white">
+            Built Different Than Static Quiz Apps
           </h2>
-          <p className="text-sm text-slate-400">
-            Everything you need to discover weak spots, practice articulate responses, and track tangible growth.
+          <p className="text-sm sm:text-base text-slate-400">
+            InterviewIQ replaces generic scripted questions with an intelligent, multi-stage evaluation engine designed for software engineers.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="hover:border-indigo-800/60 transition-all hover:-translate-y-0.5">
+          {/* Pillar 1 */}
+          <Card className="hover:border-indigo-600/70 transition-all hover:-translate-y-1 bg-gradient-to-b from-[#10182b] to-[#0c1222] border-[#1e2d4f]">
             <CardHeader>
-              <div className="h-10 w-10 rounded-lg bg-indigo-950 text-indigo-400 flex items-center justify-center mb-2 border border-indigo-800/40">
-                <FileText className="h-5 w-5" />
+              <div className="h-12 w-12 rounded-xl bg-indigo-950/80 text-indigo-400 flex items-center justify-center mb-3 border border-indigo-800/60 shadow-inner">
+                <FileText className="h-6 w-6" />
               </div>
-              <CardTitle>Resume-Aware Preparation</CardTitle>
-              <CardDescription>
-                Tailored question paths that take your past projects, stack experience, and seniority level into account.
+              <CardTitle className="text-xl">1. Resume-Aware Calibration</CardTitle>
+              <CardDescription className="text-slate-300 pt-2 leading-relaxed">
+                Upload your resume or pick from pre-configured engineering profiles. The system extracts your demonstrated tech stack, years of experience, and project scope so questions test your actual capabilities, not irrelevant trivia.
               </CardDescription>
             </CardHeader>
+            <CardContent className="pt-0">
+              <ul className="space-y-2 text-xs text-slate-400">
+                <li className="flex items-center gap-2">
+                  <Check className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                  Calibrates difficulty between junior, intermediate, and senior tiers
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                  Focuses on real tools you claim experience with
+                </li>
+              </ul>
+            </CardContent>
           </Card>
 
-          <Card className="hover:border-indigo-800/60 transition-all hover:-translate-y-0.5">
+          {/* Pillar 2 */}
+          <Card className="hover:border-violet-600/70 transition-all hover:-translate-y-1 bg-gradient-to-b from-[#10182b] to-[#0c1222] border-[#1e2d4f]">
             <CardHeader>
-              <div className="h-10 w-10 rounded-lg bg-indigo-950 text-indigo-400 flex items-center justify-center mb-2 border border-indigo-800/40">
-                <Terminal className="h-5 w-5" />
+              <div className="h-12 w-12 rounded-xl bg-violet-950/80 text-violet-400 flex items-center justify-center mb-3 border border-violet-800/60 shadow-inner">
+                <BrainCircuit className="h-6 w-6" />
               </div>
-              <CardTitle>Role-Specific Questions</CardTitle>
-              <CardDescription>
-                Curated technical challenges for Frontend, Backend, Full Stack, Python, Java, and Data Analytics tracks.
+              <CardTitle className="text-xl">2. Answer-Dependent Follow-Ups</CardTitle>
+              <CardDescription className="text-slate-300 pt-2 leading-relaxed">
+                Like a principal engineer in a live technical screen, the AI evaluates your specific claims. If you mention microservices, it tests your consistency patterns. If your answer misses a key trade-off, it prompts you to defend your decision.
               </CardDescription>
             </CardHeader>
+            <CardContent className="pt-0">
+              <ul className="space-y-2 text-xs text-slate-400">
+                <li className="flex items-center gap-2">
+                  <Check className="h-3.5 w-3.5 text-violet-400 shrink-0" />
+                  Dynamic branching based on candidate explanations
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-3.5 w-3.5 text-violet-400 shrink-0" />
+                  Uncovers true depth vs rehearsed buzzwords
+                </li>
+              </ul>
+            </CardContent>
           </Card>
 
-          <Card className="hover:border-indigo-800/60 transition-all hover:-translate-y-0.5">
+          {/* Pillar 3 */}
+          <Card className="hover:border-indigo-600/70 transition-all hover:-translate-y-1 bg-gradient-to-b from-[#10182b] to-[#0c1222] border-[#1e2d4f]">
             <CardHeader>
-              <div className="h-10 w-10 rounded-lg bg-indigo-950 text-indigo-400 flex items-center justify-center mb-2 border border-indigo-800/40">
-                <BrainCircuit className="h-5 w-5" />
+              <div className="h-12 w-12 rounded-xl bg-indigo-950/80 text-indigo-400 flex items-center justify-center mb-3 border border-indigo-800/60 shadow-inner">
+                <LineChart className="h-6 w-6" />
               </div>
-              <CardTitle>Adaptive Follow-Ups</CardTitle>
-              <CardDescription>
-                Just like a senior engineering manager, InterviewIQ listens to your trade-offs and drills into deeper questions.
+              <CardTitle className="text-xl">3. Evidence-Based Evaluations</CardTitle>
+              <CardDescription className="text-slate-300 pt-2 leading-relaxed">
+                Never settle for arbitrary 0-100 scores with generic platitudes. Every scorecard pinpoints exact sentences from your answers, correlates them against industry standards, and outlines concrete reading material to bridge gaps.
               </CardDescription>
             </CardHeader>
-          </Card>
-
-          <Card className="hover:border-indigo-800/60 transition-all hover:-translate-y-0.5">
-            <CardHeader>
-              <div className="h-10 w-10 rounded-lg bg-indigo-950 text-indigo-400 flex items-center justify-center mb-2 border border-indigo-800/40">
-                <LineChart className="h-5 w-5" />
-              </div>
-              <CardTitle>Evidence-Based Feedback</CardTitle>
-              <CardDescription>
-                No arbitrary scores. Every strength and improvement area cites actual keywords and explanations from your answers.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-
-          <Card className="hover:border-indigo-800/60 transition-all hover:-translate-y-0.5">
-            <CardHeader>
-              <div className="h-10 w-10 rounded-lg bg-indigo-950 text-indigo-400 flex items-center justify-center mb-2 border border-indigo-800/40">
-                <Layers className="h-5 w-5" />
-              </div>
-              <CardTitle>Personalized Improvement Plans</CardTitle>
-              <CardDescription>
-                Receive structured reading recommendations and actionable study roadmaps after each session.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-
-          <Card className="hover:border-indigo-800/60 transition-all hover:-translate-y-0.5">
-            <CardHeader>
-              <div className="h-10 w-10 rounded-lg bg-indigo-950 text-indigo-400 flex items-center justify-center mb-2 border border-indigo-800/40">
-                <ShieldCheck className="h-5 w-5" />
-              </div>
-              <CardTitle>Confidence Calibration</CardTitle>
-              <CardDescription>
-                Simulated real-time interview pressure with live timers, structured hints, and time-bounded problem solving.
-              </CardDescription>
-            </CardHeader>
+            <CardContent className="pt-0">
+              <ul className="space-y-2 text-xs text-slate-400">
+                <li className="flex items-center gap-2">
+                  <Check className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                  Direct citations of candidate statements
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                  Actionable improvement roadmap for interview day
+                </li>
+              </ul>
+            </CardContent>
           </Card>
         </div>
       </section>
 
-      {/* 4. HOW IT WORKS SECTION */}
-      <section id="how-it-works" className="space-y-8 scroll-mt-20">
+      {/* 3. PLATFORM COMPARISON SECTION */}
+      <section className="space-y-8 scroll-mt-20">
         <div className="text-center max-w-2xl mx-auto space-y-2">
-          <Badge variant="indigo">Streamlined Workflow</Badge>
+          <Badge variant="indigo">Comparative Advantage</Badge>
           <h2 className="text-2xl sm:text-3xl font-bold text-white">
-            How InterviewIQ Works
+            Why Realistic Simulation Matters
           </h2>
           <p className="text-sm text-slate-400">
-            Four simple steps from resume upload to comprehensive evaluation.
+            Comparing conventional prep methods with InterviewIQ&apos;s adaptive architecture.
+          </p>
+        </div>
+
+        <div className="overflow-x-auto rounded-xl border border-[#1e2d4f] bg-[#10182b]/80">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-[#0c1222] text-xs uppercase tracking-wider text-slate-400 border-b border-[#1e2d4f]">
+              <tr>
+                <th className="py-4 px-6">Capability</th>
+                <th className="py-4 px-6 text-slate-400">Static Question Banks</th>
+                <th className="py-4 px-6 text-slate-400">Generic Chatbots</th>
+                <th className="py-4 px-6 text-indigo-300 font-bold bg-indigo-950/40 border-l border-r border-indigo-800/50">InterviewIQ Engine</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#1a2642] text-xs sm:text-sm">
+              <tr>
+                <td className="py-4 px-6 font-medium text-slate-200">Resume Context Awareness</td>
+                <td className="py-4 px-6 text-slate-400 flex items-center gap-1.5"><XCircle className="h-4 w-4 text-rose-500" /> None</td>
+                <td className="py-4 px-6 text-slate-400"><HelpCircle className="h-4 w-4 text-amber-500 inline mr-1" /> Partial / Forgets context</td>
+                <td className="py-4 px-6 text-emerald-300 font-semibold bg-indigo-950/30 border-l border-r border-indigo-800/40"><CheckCircle2 className="h-4 w-4 text-emerald-400 inline mr-1.5" /> Full Resume & Stack Ingestion</td>
+              </tr>
+              <tr>
+                <td className="py-4 px-6 font-medium text-slate-200">Answer-Dependent Follow-Ups</td>
+                <td className="py-4 px-6 text-slate-400 flex items-center gap-1.5"><XCircle className="h-4 w-4 text-rose-500" /> Hardcoded scripts</td>
+                <td className="py-4 px-6 text-slate-400"><HelpCircle className="h-4 w-4 text-amber-500 inline mr-1" /> Superficial agreeableness</td>
+                <td className="py-4 px-6 text-emerald-300 font-semibold bg-indigo-950/30 border-l border-r border-indigo-800/40"><CheckCircle2 className="h-4 w-4 text-emerald-400 inline mr-1.5" /> Probing Engineering Cross-Exam</td>
+              </tr>
+              <tr>
+                <td className="py-4 px-6 font-medium text-slate-200">Evaluation Integrity</td>
+                <td className="py-4 px-6 text-slate-400 flex items-center gap-1.5"><XCircle className="h-4 w-4 text-rose-500" /> Binary pass/fail unit tests</td>
+                <td className="py-4 px-6 text-slate-400"><HelpCircle className="h-4 w-4 text-amber-500 inline mr-1" /> Generic subjective praise</td>
+                <td className="py-4 px-6 text-emerald-300 font-semibold bg-indigo-950/30 border-l border-r border-indigo-800/40"><CheckCircle2 className="h-4 w-4 text-emerald-400 inline mr-1.5" /> Evidence-Cited Rubric Scorecard</td>
+              </tr>
+              <tr>
+                <td className="py-4 px-6 font-medium text-slate-200">Realistic Interview Pacing</td>
+                <td className="py-4 px-6 text-slate-400 flex items-center gap-1.5"><XCircle className="h-4 w-4 text-rose-500" /> No time bounds or hints</td>
+                <td className="py-4 px-6 text-slate-400"><XCircle className="h-4 w-4 text-rose-500 inline mr-1" /> Unstructured dialogue</td>
+                <td className="py-4 px-6 text-emerald-300 font-semibold bg-indigo-950/30 border-l border-r border-indigo-800/40"><CheckCircle2 className="h-4 w-4 text-emerald-400 inline mr-1.5" /> Structured Timer, Hints & Safety</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* 4. TRACKS / ROLES EXPLORATION */}
+      <section id="tracks" className="space-y-8 scroll-mt-20">
+        <div className="text-center max-w-2xl mx-auto space-y-2">
+          <Badge variant="indigo">Supported Tracks</Badge>
+          <h2 className="text-2xl sm:text-3xl font-bold text-white">
+            Comprehensive Role Coverage
+          </h2>
+          <p className="text-sm text-slate-400">
+            Practice scenarios calibrated for the core specializations in high-growth tech companies.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="rounded-xl border border-[#1e2d4f] bg-[#10182b] p-5 space-y-2 hover:border-indigo-700/60 transition-colors">
+            <div className="flex items-center gap-2 text-indigo-400 font-semibold text-sm">
+              <Code2 className="h-4 w-4" />
+              <span>Frontend Engineering</span>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              React 19 internals, SSR hydration pitfalls, Core Web Vitals, state management, and modern DOM paradigms.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-[#1e2d4f] bg-[#10182b] p-5 space-y-2 hover:border-indigo-700/60 transition-colors">
+            <div className="flex items-center gap-2 text-violet-400 font-semibold text-sm">
+              <Cpu className="h-4 w-4" />
+              <span>Backend Systems</span>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Distributed consensus, idempotent transactions, database indexing, caching strategies, and API contracts.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-[#1e2d4f] bg-[#10182b] p-5 space-y-2 hover:border-indigo-700/60 transition-colors">
+            <div className="flex items-center gap-2 text-indigo-400 font-semibold text-sm">
+              <Layers className="h-4 w-4" />
+              <span>Full-Stack Architecture</span>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              End-to-end data synchronization, edge compute, auth flows, microfrontends, and schema evolution.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-[#1e2d4f] bg-[#10182b] p-5 space-y-2 hover:border-indigo-700/60 transition-colors">
+            <div className="flex items-center gap-2 text-violet-400 font-semibold text-sm">
+              <Terminal className="h-4 w-4" />
+              <span>Python & Data Systems</span>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Async I/O, data pipelines, model serving architectures, memory management, and data consistency models.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* 5. HOW IT WORKS WORKFLOW */}
+      <section id="how-it-works" className="space-y-8 scroll-mt-20">
+        <div className="text-center max-w-2xl mx-auto space-y-2">
+          <Badge variant="indigo">Step-by-Step Methodology</Badge>
+          <h2 className="text-2xl sm:text-3xl font-bold text-white">
+            How An Interview Session Unfolds
+          </h2>
+          <p className="text-sm text-slate-400">
+            From profile calibration to detailed forensic evaluation in four systematic stages.
           </p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="rounded-xl border border-[#1e2d4f] bg-[#10182b] p-6 space-y-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-white font-bold text-sm">
+          <div className="rounded-xl border border-[#1e2d4f] bg-[#10182b] p-6 space-y-3 relative overflow-hidden group hover:border-indigo-600/60 transition-all">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600/90 text-white font-bold text-sm shadow-md shadow-indigo-900/50">
               1
             </div>
-            <h3 className="font-semibold text-white text-base">Candidate Setup</h3>
+            <h3 className="font-semibold text-white text-base">Setup & Calibrate</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Upload your resume or use our quick sample profile, pick your engineering role, and calibrate interview duration.
+              Paste your resume or load a curated engineering profile. Select your track, focus area (system design, coding, or mixed), and time budget.
             </p>
           </div>
 
-          <div className="rounded-xl border border-[#1e2d4f] bg-[#10182b] p-6 space-y-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-white font-bold text-sm">
+          <div className="rounded-xl border border-[#1e2d4f] bg-[#10182b] p-6 space-y-3 relative overflow-hidden group hover:border-indigo-600/60 transition-all">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-600/90 text-white font-bold text-sm shadow-md shadow-violet-900/50">
               2
             </div>
             <h3 className="font-semibold text-white text-base">Adaptive Dialogue</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Answer real-world architectural and coding prompts. The system branches dynamically depending on your answers.
+              Face realistic technical prompts. Receive structured progressive hints if you get stuck, and answer dynamic follow-up questions tailored to your logic.
             </p>
           </div>
 
-          <div className="rounded-xl border border-[#1e2d4f] bg-[#10182b] p-6 space-y-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-white font-bold text-sm">
+          <div className="rounded-xl border border-[#1e2d4f] bg-[#10182b] p-6 space-y-3 relative overflow-hidden group hover:border-indigo-600/60 transition-all">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600/90 text-white font-bold text-sm shadow-md shadow-indigo-900/50">
               3
             </div>
-            <h3 className="font-semibold text-white text-base">Analytical Synthesis</h3>
+            <h3 className="font-semibold text-white text-base">Evidence Extraction</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Review granular category metrics across architecture, performance, problem-solving, and communication.
+              Our evaluation engine scans your responses, isolating sound trade-offs, missed edge cases, and architectural justifications without bias.
             </p>
           </div>
 
-          <div className="rounded-xl border border-[#1e2d4f] bg-[#10182b] p-6 space-y-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-white font-bold text-sm">
+          <div className="rounded-xl border border-[#1e2d4f] bg-[#10182b] p-6 space-y-3 relative overflow-hidden group hover:border-indigo-600/60 transition-all">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-600/90 text-white font-bold text-sm shadow-md shadow-violet-900/50">
               4
             </div>
-            <h3 className="font-semibold text-white text-base">Targeted Growth</h3>
+            <h3 className="font-semibold text-white text-base">Forensic Scorecard</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Follow tailored roadmap items to reinforce identified gaps before stepping into your real interview.
+              Access your detailed report with category scores, exact citations, overall readiness verdict, and personalized practice roadmap.
             </p>
           </div>
         </div>
       </section>
 
-      {/* 5. ABOUT & CLOSING CTA */}
-      <section id="about" className="rounded-2xl border border-indigo-900/50 bg-gradient-to-br from-[#10182b] to-[#0c1222] p-8 sm:p-12 text-center space-y-6 scroll-mt-20">
-        <div className="inline-flex items-center gap-2 rounded-full bg-indigo-950/80 px-3 py-1 text-xs font-medium text-indigo-300 border border-indigo-800/40">
-          <Terminal className="h-3.5 w-3.5" />
-          <span>Hackathon Demonstration</span>
+      {/* 6. CALL TO ACTION & ONBOARDING OPTIONS */}
+      <section className="rounded-2xl border border-indigo-900/50 bg-gradient-to-br from-[#10182b] via-[#0c1222] to-[#070b14] p-8 sm:p-12 text-center space-y-8 scroll-mt-20 shadow-2xl shadow-indigo-950/40">
+        <div className="space-y-3 max-w-2xl mx-auto">
+          <div className="inline-flex items-center gap-2 rounded-full bg-indigo-950/80 px-3.5 py-1 text-xs font-medium text-indigo-300 border border-indigo-800/40">
+            <Compass className="h-3.5 w-3.5" />
+            <span>Ready for Your Next Technical Challenge?</span>
+          </div>
+
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-white">
+            Choose How You Want to Experience InterviewIQ
+          </h2>
+
+          <p className="text-sm sm:text-base text-slate-300">
+            Try a real-time interview right now without an account, or create an account to save your evaluations and track historical progress.
+          </p>
         </div>
 
-        <h2 className="text-3xl sm:text-4xl font-extrabold text-white max-w-2xl mx-auto">
-          Ready to experience the future of technical interview prep?
-        </h2>
+        {/* Dual Onboarding Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto text-left">
+          {/* Guest / Demo Flow */}
+          <div className="rounded-xl border border-[#22304e] bg-[#0c1222]/90 p-6 flex flex-col justify-between space-y-4 hover:border-indigo-600/50 transition-all">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Badge variant="indigo">Immediate Demo</Badge>
+                <span className="text-xs text-slate-400">Zero signup</span>
+              </div>
+              <h3 className="text-lg font-bold text-white">Instant Guest Interview</h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Jump directly into candidate setup. Uses local browser storage to run a complete, unrestricted interview session with live evaluation.
+              </p>
+            </div>
+            <Link href="/setup">
+              <Button className="w-full gap-2 justify-center bg-indigo-600 hover:bg-indigo-500">
+                Start Guest Interview
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </Link>
+          </div>
 
-        <p className="text-sm sm:text-base text-slate-300 max-w-xl mx-auto">
-          Start your personalized interview session now or inspect the candidate dashboard.
-        </p>
+          {/* Registered Candidate Flow */}
+          <div className="rounded-xl border border-violet-900/60 bg-[#0c1222]/90 p-6 flex flex-col justify-between space-y-4 hover:border-violet-500/50 transition-all">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Badge variant="success">Saved Progress</Badge>
+                <span className="text-xs text-slate-400">Secure Session</span>
+              </div>
+              <h3 className="text-lg font-bold text-white">Candidate Account</h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Create a password-protected candidate account to persist your reports across devices, review past feedback, and monitor progress over time.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Link href="/signup" className="flex-1">
+                <Button className="w-full justify-center bg-violet-600 hover:bg-violet-500 text-white">
+                  Create Account
+                </Button>
+              </Link>
+              <Link href="/login" className="flex-1">
+                <Button variant="secondary" className="w-full justify-center">
+                  Sign In
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
-          <Link href="/setup">
-            <Button size="lg" className="gap-2.5 h-12 px-8 shadow-lg shadow-indigo-950/60">
-              Start Candidate Setup
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </Link>
-          <Link href="/dashboard">
-            <Button variant="secondary" size="lg" className="h-12 px-6">
-              View Candidate Dashboard
-            </Button>
-          </Link>
+        <div className="pt-2 text-xs text-slate-400">
+          InterviewIQ is an engineering evaluation simulation platform. Evaluations are advisory practice signals designed to accelerate candidate preparation.
         </div>
       </section>
     </div>

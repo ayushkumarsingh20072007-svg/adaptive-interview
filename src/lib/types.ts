@@ -10,6 +10,13 @@ export type ExperienceLevel = "beginner" | "intermediate" | "advanced";
 
 export type InterviewFocus = "dsa" | "core-concepts" | "projects" | "mixed";
 
+export interface UserAccount {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string;
+}
+
 export interface CandidateSetup {
   candidateName: string;
   targetRole: TargetRole;
@@ -21,6 +28,7 @@ export interface CandidateSetup {
   isSampleResume?: boolean;
   skills: string[];
   createdAt: string;
+  userId?: string;
 }
 
 export interface Question {
@@ -65,6 +73,7 @@ export interface InterviewSession {
   durationSeconds: number;
   answers: AnswerRecord[];
   currentQuestionIndex: number;
+  userId?: string;
 }
 
 export interface SkillMetric {
@@ -90,4 +99,6 @@ export interface EvaluationReport {
   actionableRoadmap: string[];
   answerRecords: AnswerRecord[];
   isDemoSimulation: boolean;
+  userId?: string;
 }
+
