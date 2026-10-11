@@ -23,19 +23,19 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     ref
   ) => {
     const baseStyles =
-      "inline-flex items-center justify-center font-medium rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0c1222] disabled:opacity-50 disabled:pointer-events-none select-none cursor-pointer";
+      "inline-flex items-center justify-center font-semibold rounded-xl transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#070c18] disabled:opacity-50 disabled:pointer-events-none select-none cursor-pointer active:scale-[0.98]";
 
     const variantStyles: Record<string, string> = {
       primary:
-        "bg-indigo-600 text-white hover:bg-indigo-500 active:bg-indigo-700 shadow-sm shadow-indigo-950/50",
+        "bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-600 text-white hover:from-indigo-500 hover:to-violet-500 shadow-lg shadow-indigo-950/70 hover:shadow-indigo-600/30 border border-indigo-400/25",
       secondary:
-        "bg-[#141e34] text-slate-100 border border-[#22304e] hover:bg-[#1a2642] hover:border-[#33446b]",
+        "bg-[#10192d]/90 text-slate-100 border border-[#22304e] hover:bg-[#182442] hover:border-indigo-500/50 shadow-sm backdrop-blur-md",
       outline:
-        "bg-transparent text-slate-200 border border-[#22304e] hover:bg-[#141e34] hover:text-white",
+        "bg-transparent text-slate-200 border border-[#22304e] hover:bg-[#10192d] hover:border-indigo-500/50 hover:text-white shadow-sm",
       ghost:
-        "bg-transparent text-slate-300 hover:bg-[#141e34] hover:text-slate-100",
+        "bg-transparent text-slate-300 hover:bg-[#141e34]/70 hover:text-white",
       danger:
-        "bg-rose-600 text-white hover:bg-rose-500 active:bg-rose-700 shadow-sm shadow-rose-950/40",
+        "bg-gradient-to-r from-rose-600 to-red-600 text-white hover:from-rose-500 hover:to-red-500 shadow-md shadow-rose-950/50 border border-rose-400/25",
     };
 
     const sizeStyles: Record<string, string> = {

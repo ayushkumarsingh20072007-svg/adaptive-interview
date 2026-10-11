@@ -24,6 +24,7 @@ import {
   RefreshCw,
   Clock,
   ShieldCheck,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
@@ -172,191 +173,217 @@ export default function DashboardPage() {
   const expectedSkills = ROLE_SKILLS[setup.targetRole] || [];
 
   return (
-    <div className="flex flex-col gap-8 max-w-6xl mx-auto w-full py-4">
-      {/* 1. WELCOME HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#1e2d4f] pb-5">
-        <div>
-          <div className="flex flex-wrap items-center gap-2 mb-1.5">
-            <Badge variant="indigo" className="font-semibold tracking-wide">Command Center</Badge>
-            {user ? (
-              <Badge variant="success" className="text-[10px]">Account: {user.email}</Badge>
-            ) : (
-              <Badge variant="default" className="text-[10px]">Guest Demo Mode</Badge>
-            )}
-            <span className="text-xs text-slate-400 font-mono">
-              Track: {roleName}
-            </span>
-            <span className="text-xs text-slate-500">•</span>
-            <span className="text-xs text-slate-400 capitalize">
-              {setup.experienceLevel} Level
-            </span>
+    <div className="flex flex-col gap-8 max-w-6xl mx-auto w-full py-2">
+      {/* 1. ULTRA-PREMIUM COMMAND CENTER HEADER */}
+      <div className="relative rounded-3xl border border-indigo-500/20 bg-gradient-to-r from-[#0d152a]/95 via-[#0b1021]/95 to-[#070b16]/95 backdrop-blur-2xl p-6 sm:p-8 shadow-2xl shadow-indigo-950/40 overflow-hidden">
+        {/* Ambient Top Glow Line */}
+        <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-indigo-500/60 to-transparent" />
+        <div className="absolute top-0 right-1/4 w-80 h-32 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide bg-indigo-950/80 text-indigo-300 border border-indigo-700/40 shadow-inner">
+                <Sparkles className="h-3.5 w-3.5 text-indigo-400 animate-pulse" />
+                Adaptive AI Intelligence Engine
+              </span>
+
+              {user ? (
+                <Badge variant="success" className="text-[11px]">
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                  Verified: {user.email}
+                </Badge>
+              ) : (
+                <Badge variant="default" className="text-[11px]">
+                  Guest Demo Sandbox
+                </Badge>
+              )}
+
+              <span className="text-xs text-slate-400 font-mono flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
+                Track: {roleName}
+              </span>
+            </div>
+
+            <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+              Welcome back, <span className="text-gradient-primary">{displayName}</span>
+            </h1>
+
+            <p className="text-sm text-slate-300 max-w-2xl leading-relaxed">
+              Real-time technical interview analytics command center. Calibrate your profile, execute adaptive AI sessions, and inspect evidence-backed scorecards with quote citations.
+            </p>
           </div>
 
-          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-            Welcome back, {displayName}
-          </h1>
-          <p className="text-sm text-slate-400 mt-0.5">
-            AI interview performance analytics, evidence-backed evaluation scorecards, and calibrated competency diagnostics.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5">
-          <Link href="/setup">
-            <Button variant="secondary" size="sm" className="gap-1.5 text-xs">
-              <Settings className="h-3.5 w-3.5 text-slate-400" />
-              Recalibrate Profile
-            </Button>
-          </Link>
-
-          {reports.length > 0 && (
-            <Link href={`/report/${reports[0].sessionId}`}>
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs border-[#22304e] hover:border-indigo-600/60">
-                <FileText className="h-3.5 w-3.5 text-indigo-400" />
-                Latest Report
+          <div className="flex flex-wrap items-center gap-3 shrink-0">
+            <Link href="/setup">
+              <Button variant="secondary" size="sm" className="gap-2 text-xs h-10 px-4">
+                <Settings className="h-3.5 w-3.5 text-slate-400" />
+                Recalibrate Track
               </Button>
             </Link>
-          )}
 
-          <Button
-            size="sm"
-            onClick={() => handleStartNewInterview()}
-            isLoading={isStarting}
-            className="gap-2 shadow-md shadow-indigo-950/70 font-semibold"
-          >
-            <Play className="h-3.5 w-3.5 fill-current" />
-            Start New Interview
-          </Button>
+            {reports.length > 0 && (
+              <Link href={`/report/${reports[0].sessionId}`}>
+                <Button variant="outline" size="sm" className="gap-2 text-xs h-10 px-4 border-indigo-900/40 hover:border-indigo-500/50">
+                  <FileText className="h-3.5 w-3.5 text-indigo-400" />
+                  Latest Audit
+                </Button>
+              </Link>
+            )}
+
+            <Button
+              size="md"
+              onClick={() => handleStartNewInterview()}
+              isLoading={isStarting}
+              className="gap-2 font-bold shadow-xl shadow-indigo-600/25 h-10 px-5"
+            >
+              <Play className="h-4 w-4 fill-current" />
+              Launch Live Interview
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* 2. ANALYTICS CARDS (Top Command Center Metrics) */}
+      {/* 2. TOP 4 ANALYTICS COMMAND CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Completed Interviews */}
-        <Card className="p-4.5 bg-[#10182b] border-[#1e2d4f] hover:border-indigo-900/60 transition-colors">
+        {/* Card 1: Completed Audits */}
+        <Card className="p-5 relative overflow-hidden group hover:border-indigo-500/40 transition-all duration-300 hover:-translate-y-1">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-indigo-500/10 transition-colors" />
           <div className="flex items-center justify-between text-xs text-slate-400">
-            <span className="font-medium">Completed Audits</span>
-            <FileText className="h-4 w-4 text-indigo-400" />
+            <span className="font-semibold uppercase tracking-wider text-[10px]">Completed Audits</span>
+            <div className="h-8 w-8 rounded-xl bg-indigo-950/80 border border-indigo-800/40 flex items-center justify-center text-indigo-400">
+              <FileText className="h-4 w-4" />
+            </div>
           </div>
-          <p className="text-2xl sm:text-3xl font-extrabold text-white mt-2 font-mono">
+          <p className="text-3xl font-extrabold text-white mt-3 font-mono tracking-tight">
             {analytics.completedCount}
           </p>
-          <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5">
+          <div className="text-[11px] text-slate-400 mt-2 flex items-center gap-1.5">
             {analytics.completedCount > 0 ? (
               <>
-                <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
                 <span className="text-emerald-400 font-medium">Verified evaluation records</span>
               </>
             ) : (
-              <span className="text-slate-500">Awaiting initial evaluation</span>
+              <span className="text-slate-500 font-mono">0 sessions logged yet</span>
             )}
-          </p>
+          </div>
         </Card>
 
-        {/* Card 2: Average Score */}
-        <Card className="p-4.5 bg-[#10182b] border-[#1e2d4f] hover:border-indigo-900/60 transition-colors">
+        {/* Card 2: Composite Score */}
+        <Card className="p-5 relative overflow-hidden group hover:border-violet-500/40 transition-all duration-300 hover:-translate-y-1">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-violet-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-violet-500/10 transition-colors" />
           <div className="flex items-center justify-between text-xs text-slate-400">
-            <span className="font-medium">Composite Readiness</span>
-            <TrendingUp className="h-4 w-4 text-indigo-400" />
+            <span className="font-semibold uppercase tracking-wider text-[10px]">Composite Readiness</span>
+            <div className="h-8 w-8 rounded-xl bg-violet-950/80 border border-violet-800/40 flex items-center justify-center text-violet-400">
+              <TrendingUp className="h-4 w-4" />
+            </div>
           </div>
-          <p className="text-2xl sm:text-3xl font-extrabold text-indigo-300 mt-2 font-mono">
+          <p className="text-3xl font-extrabold text-gradient-primary mt-3 font-mono tracking-tight">
             {analytics.averageScore !== null ? `${analytics.averageScore}%` : "—"}
           </p>
-          <p className="text-[11px] text-slate-400 mt-1 truncate">
-            {analytics.averageScore !== null
-              ? analytics.averageScore >= 88
-                ? "Strong Hire Recommendation Range"
-                : analytics.averageScore >= 72
-                ? "Hire Recommendation Range"
-                : "Additional Review Recommended"
-              : "No evaluations recorded yet"}
-          </p>
+          <div className="text-[11px] text-slate-400 mt-2 truncate">
+            {analytics.averageScore !== null ? (
+              <span className={analytics.averageScore >= 88 ? "text-emerald-400 font-medium" : analytics.averageScore >= 72 ? "text-indigo-300 font-medium" : "text-amber-400 font-medium"}>
+                {analytics.averageScore >= 88 ? "Strong Hire Tier" : analytics.averageScore >= 72 ? "Hire Recommendation Tier" : "Additional Review Tier"}
+              </span>
+            ) : (
+              <span className="text-slate-500 font-mono">Benchmark pending 1st session</span>
+            )}
+          </div>
         </Card>
 
         {/* Card 3: Strongest Competency */}
-        <Card className="p-4.5 bg-[#10182b] border-[#1e2d4f] hover:border-indigo-900/60 transition-colors">
+        <Card className="p-5 relative overflow-hidden group hover:border-emerald-500/40 transition-all duration-300 hover:-translate-y-1">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-emerald-500/10 transition-colors" />
           <div className="flex items-center justify-between text-xs text-slate-400">
-            <span className="font-medium">Strongest Competency</span>
-            <Award className="h-4 w-4 text-emerald-400" />
+            <span className="font-semibold uppercase tracking-wider text-[10px]">Top Competency</span>
+            <div className="h-8 w-8 rounded-xl bg-emerald-950/80 border border-emerald-800/40 flex items-center justify-center text-emerald-400">
+              <Award className="h-4 w-4" />
+            </div>
           </div>
-          <p className="text-base sm:text-lg font-bold text-white mt-2 truncate">
+          <p className="text-lg font-bold text-white mt-3 truncate">
             {analytics.strongest ? analytics.strongest.category : "Pending Analysis"}
           </p>
-          <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+          <div className="text-[11px] text-slate-400 mt-2">
             {analytics.strongest ? (
               <span className="text-emerald-400 font-medium font-mono">
                 {analytics.strongest.avgScore}% • {analytics.strongest.level}
               </span>
             ) : (
-              <span className="text-slate-500">Unlocks after first evaluation</span>
+              <span className="text-slate-500 font-mono">Unlocks after 1st interview</span>
             )}
-          </p>
+          </div>
         </Card>
 
         {/* Card 4: Improvement Priority */}
-        <Card className="p-4.5 bg-[#10182b] border-[#1e2d4f] hover:border-indigo-900/60 transition-colors">
+        <Card className="p-5 relative overflow-hidden group hover:border-amber-500/40 transition-all duration-300 hover:-translate-y-1">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-amber-500/10 transition-colors" />
           <div className="flex items-center justify-between text-xs text-slate-400">
-            <span className="font-medium">Improvement Priority</span>
-            <Target className="h-4 w-4 text-amber-400" />
+            <span className="font-semibold uppercase tracking-wider text-[10px]">Improvement Focus</span>
+            <div className="h-8 w-8 rounded-xl bg-amber-950/80 border border-amber-800/40 flex items-center justify-center text-amber-400">
+              <Target className="h-4 w-4" />
+            </div>
           </div>
-          <p className="text-base sm:text-lg font-bold text-white mt-2 truncate">
+          <p className="text-lg font-bold text-white mt-3 truncate">
             {analytics.priority ? analytics.priority.category : "Pending Analysis"}
           </p>
-          <p className="text-[11px] text-slate-400 mt-1">
+          <div className="text-[11px] text-slate-400 mt-2">
             {analytics.priority ? (
               <span className="text-amber-400 font-medium font-mono">
-                {analytics.priority.avgScore}% • Calibrated Target
+                {analytics.priority.avgScore}% • Priority Drill
               </span>
             ) : (
-              <span className="text-slate-500">Unlocks after first evaluation</span>
+              <span className="text-slate-500 font-mono">Unlocks after 1st interview</span>
             )}
-          </p>
+          </div>
         </Card>
       </div>
 
-      {/* DASHBOARD SUB-NAVIGATION TABS */}
-      <div className="flex items-center gap-1 border-b border-[#1e2d4f] pb-1 overflow-x-auto">
+      {/* 3. SEGMENTED TABS NAVIGATION */}
+      <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-[#0a0f1d]/90 border border-indigo-950/80 backdrop-blur-xl overflow-x-auto">
         <button
           onClick={() => setActiveTab("overview")}
-          className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
             activeTab === "overview"
-              ? "bg-[#162244] text-indigo-300 border border-indigo-700/50"
-              : "text-slate-400 hover:text-slate-200 hover:bg-[#141e34]"
+              ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-950/80"
+              : "text-slate-400 hover:text-slate-200 hover:bg-[#131d35]/60"
           }`}
         >
           <Layers className="h-4 w-4" />
-          Overview
+          Overview Command
         </button>
 
         <button
           onClick={() => setActiveTab("history")}
-          className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
             activeTab === "history"
-              ? "bg-[#162244] text-indigo-300 border border-indigo-700/50"
-              : "text-slate-400 hover:text-slate-200 hover:bg-[#141e34]"
+              ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-950/80"
+              : "text-slate-400 hover:text-slate-200 hover:bg-[#131d35]/60"
           }`}
         >
           <History className="h-4 w-4" />
-          Interview History ({reports.length})
+          Evaluation History ({reports.length})
         </button>
 
         <button
           onClick={() => setActiveTab("skills")}
-          className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
             activeTab === "skills"
-              ? "bg-[#162244] text-indigo-300 border border-indigo-700/50"
-              : "text-slate-400 hover:text-slate-200 hover:bg-[#141e34]"
+              ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-950/80"
+              : "text-slate-400 hover:text-slate-200 hover:bg-[#131d35]/60"
           }`}
         >
           <BrainCircuit className="h-4 w-4" />
-          Skills & Readiness
+          Skills & Diagnostics
         </button>
 
         <button
           onClick={() => setActiveTab("settings")}
-          className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
             activeTab === "settings"
-              ? "bg-[#162244] text-indigo-300 border border-indigo-700/50"
-              : "text-slate-400 hover:text-slate-200 hover:bg-[#141e34]"
+              ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-950/80"
+              : "text-slate-400 hover:text-slate-200 hover:bg-[#131d35]/60"
           }`}
         >
           <User className="h-4 w-4" />
@@ -369,106 +396,112 @@ export default function DashboardPage() {
       {/* ========================================================================= */}
       {activeTab === "overview" && (
         <div className="space-y-6">
-          {/* ZERO STATE (First-time Candidate Experience) */}
+          {/* ZERO STATE: High Impact, Non-Fabricated First Time Command Center */}
           {reports.length === 0 ? (
             <div className="space-y-6">
-              {/* First-Time Hero Onboarding Card */}
-              <Card className="border-indigo-900/50 bg-gradient-to-br from-[#10182b] via-[#0d1527] to-[#070b14] p-6 sm:p-8">
-                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              {/* Luminous Hero Onboarding Card */}
+              <div className="relative rounded-3xl border border-indigo-500/30 bg-gradient-to-br from-[#10182b] via-[#0c1222] to-[#070b14] p-6 sm:p-8 overflow-hidden shadow-2xl">
+                <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-64 h-64 bg-violet-600/10 rounded-full blur-3xl pointer-events-none" />
+
+                <div className="relative flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
                   <div className="space-y-3 max-w-2xl">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-indigo-800/60 bg-indigo-950/60 px-3 py-1 text-xs text-indigo-300">
-                      <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
-                      <span>Ready for Initial Evaluation</span>
+                    <div className="inline-flex items-center gap-2 rounded-full border border-indigo-700/50 bg-indigo-950/70 px-3.5 py-1 text-xs text-indigo-300">
+                      <Zap className="h-3.5 w-3.5 text-indigo-400" />
+                      <span>Ready for Baseline Adaptive Evaluation</span>
                     </div>
-                    <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-                      Launch Your Baseline AI Interview in {roleName}
+
+                    <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                      Calibrate and Launch Your AI Interview in {roleName}
                     </h2>
+
                     <p className="text-sm text-slate-300 leading-relaxed">
-                      Your command center is configured and ready. Experience live adaptive technical inquiry: the AI evaluates your exact answers, asks dynamic architectural follow-ups, and produces an evidence-backed scorecard.
+                      Experience rigorous technical evaluation: Gemini AI asks open-ended architectural and implementation questions, dynamically analyzes your exact quotes, and builds your evidence scorecard.
                     </p>
-                    <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400 pt-1">
-                      <span className="flex items-center gap-1.5">
+
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400 pt-2">
+                      <span className="flex items-center gap-1.5 bg-[#141e34]/80 px-3 py-1 rounded-lg border border-[#22304e]">
                         <Clock className="h-3.5 w-3.5 text-indigo-400" />
-                        {setup.interviewLength || 20} Minutes duration
+                        {setup.interviewLength || 20} Min format (~3–4 dynamic questions)
                       </span>
-                      <span className="flex items-center gap-1.5">
+                      <span className="flex items-center gap-1.5 bg-[#141e34]/80 px-3 py-1 rounded-lg border border-[#22304e]">
                         <Target className="h-3.5 w-3.5 text-indigo-400" />
                         Focus: {setup.interviewFocus.replace("-", " ").toUpperCase()}
                       </span>
-                      <span className="flex items-center gap-1.5">
+                      <span className="flex items-center gap-1.5 bg-[#141e34]/80 px-3 py-1 rounded-lg border border-[#22304e]">
                         <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-                        Evidence-verified audit
+                        Evidence-verified citations
                       </span>
                     </div>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row md:flex-col gap-3 w-full md:w-auto shrink-0">
+                  <div className="flex flex-col sm:flex-row lg:flex-col gap-3 w-full lg:w-auto shrink-0">
                     <Button
                       size="lg"
                       onClick={() => handleStartNewInterview()}
                       isLoading={isStarting}
-                      className="gap-2 shadow-lg shadow-indigo-950/80 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 font-semibold"
+                      className="gap-2.5 font-bold shadow-xl shadow-indigo-600/30 text-sm h-12 px-7"
                     >
                       <Play className="h-4 w-4 fill-current" />
                       Start Baseline Interview
                     </Button>
                     <Link href="/report/demo-session">
-                      <Button variant="outline" size="sm" className="w-full gap-2 text-xs border-[#22304e] hover:border-indigo-600/60">
+                      <Button variant="outline" size="sm" className="w-full gap-2 text-xs h-10 border-indigo-900/40 hover:border-indigo-500/50">
                         <ExternalLink className="h-3.5 w-3.5 text-indigo-400" />
                         Inspect Sample Demo Report
                       </Button>
                     </Link>
                   </div>
                 </div>
-              </Card>
+              </div>
 
               {/* 3-Step Guided Roadmap */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="p-5 bg-[#10182b] border-[#1e2d4f]">
-                  <div className="flex items-center gap-3 mb-2.5">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-950/70 border border-indigo-800/50 text-indigo-300 font-bold text-xs">
+                <Card className="p-5.5 hover:border-indigo-500/40 transition-all duration-300">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-950/60">
                       01
                     </div>
-                    <h3 className="font-semibold text-white text-sm">Role Calibration</h3>
+                    <h3 className="font-bold text-white text-base">Role Calibration</h3>
                   </div>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    Set your engineering track, difficulty tier, and interview focus. Upload an optional resume to guide question context.
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    Configure your engineering track, experience level, and optional resume. Questions adapt directly to your profile.
                   </p>
                 </Card>
 
-                <Card className="p-5 bg-[#10182b] border-[#1e2d4f]">
-                  <div className="flex items-center gap-3 mb-2.5">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-950/70 border border-indigo-800/50 text-indigo-300 font-bold text-xs">
+                <Card className="p-5.5 hover:border-indigo-500/40 transition-all duration-300">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-700 text-white font-bold text-xs shadow-md shadow-purple-950/60">
                       02
                     </div>
-                    <h3 className="font-semibold text-white text-sm">Adaptive AI Inquiry</h3>
+                    <h3 className="font-bold text-white text-base">Adaptive AI Inquiry</h3>
                   </div>
-                  <p className="text-xs text-slate-400 leading-relaxed">
+                  <p className="text-xs text-slate-300 leading-relaxed">
                     Answer real-time technical questions. Strong reasoning unlocks deeper edge cases; gaps trigger targeted conceptual follow-ups.
                   </p>
                 </Card>
 
-                <Card className="p-5 bg-[#10182b] border-[#1e2d4f]">
-                  <div className="flex items-center gap-3 mb-2.5">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-950/70 border border-indigo-800/50 text-indigo-300 font-bold text-xs">
+                <Card className="p-5.5 hover:border-indigo-500/40 transition-all duration-300">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 text-white font-bold text-xs shadow-md shadow-emerald-950/60">
                       03
                     </div>
-                    <h3 className="font-semibold text-white text-sm">Evidence Scorecard</h3>
+                    <h3 className="font-bold text-white text-base">Evidence Scorecard</h3>
                   </div>
-                  <p className="text-xs text-slate-400 leading-relaxed">
+                  <p className="text-xs text-slate-300 leading-relaxed">
                     Receive a synthesis with quote citations, category readiness benchmarks, hiring recommendations, and actionable roadmap steps.
                   </p>
                 </Card>
               </div>
 
-              {/* Competency Readiness Outline (Honest Zero State) */}
-              <Card className="bg-[#10182b] border-[#1e2d4f]">
+              {/* Target Competencies Preview (Honest Zero State) */}
+              <Card>
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
                       <CardTitle className="text-base text-white">Target Competencies for {roleName}</CardTitle>
                       <CardDescription>
-                        Key subject areas evaluated during your interview sessions.
+                        Key subject areas evaluated during your live adaptive interview sessions.
                       </CardDescription>
                     </div>
                     <Badge variant="outline" className="text-[11px]">0 Sessions Logged</Badge>
@@ -479,9 +512,9 @@ export default function DashboardPage() {
                     {expectedSkills.map((skill) => (
                       <div
                         key={skill}
-                        className="flex items-center justify-between p-3 rounded-lg border border-[#1e2d4f] bg-[#0c1222] text-xs"
+                        className="flex items-center justify-between p-3.5 rounded-xl border border-[#1e2d4f] bg-[#0a0f1d] text-xs hover:border-indigo-700/50 transition-colors"
                       >
-                        <span className="font-medium text-slate-300">{skill}</span>
+                        <span className="font-medium text-slate-200">{skill}</span>
                         <span className="text-[10px] text-slate-500 font-mono">Benchmark Pending</span>
                       </div>
                     ))}
@@ -490,29 +523,32 @@ export default function DashboardPage() {
               </Card>
             </div>
           ) : (
-            /* RETURNING CANDIDATE WITH REAL EVALUATION RECORDS */
+            /* RETURNING CANDIDATE EXPERIENCE WITH REAL EVALUATIONS */
             <div className="space-y-6">
               {/* Quick Launch & Competency Readiness Grid */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Left: Quick Launch Next Action */}
-                <Card className="lg:col-span-2 border-indigo-900/40 bg-gradient-to-br from-[#10182b] to-[#0c1222]">
+                {/* Left: Quick Launch Card */}
+                <Card className="lg:col-span-2 border-indigo-900/40 bg-gradient-to-br from-[#10182b] via-[#0c1222] to-[#070b14]">
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <Badge variant="indigo">Next Recommended Action</Badge>
+                      <Badge variant="indigo" className="gap-1">
+                        <Sparkles className="h-3 w-3" />
+                        Next Recommended Action
+                      </Badge>
                       <span className="text-xs text-slate-400 font-mono">Adaptive AI Session</span>
                     </div>
-                    <CardTitle className="text-lg text-white">
+                    <CardTitle className="text-xl text-white mt-1">
                       Execute Live Technical Evaluation for {roleName}
                     </CardTitle>
                     <CardDescription>
-                      Engage in real-time adaptive questioning that automatically follows up on your architectural decisions, trade-offs, and code depth.
+                      Engage in real-time adaptive questioning that dynamically probes your architectural decisions, trade-offs, and failure recovery.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="rounded-lg border border-[#1e2d4f] bg-[#070b14]/60 p-4 space-y-2 text-xs">
+                    <div className="rounded-xl border border-[#1e2d4f] bg-[#070b14]/70 p-4 space-y-2 text-xs">
                       <div className="flex items-center justify-between text-slate-300 font-medium">
-                        <span>Session Focus</span>
-                        <span className="text-indigo-400 font-mono">{setup.interviewFocus.replace("-", " ").toUpperCase()}</span>
+                        <span>Session Calibration</span>
+                        <span className="text-indigo-400 font-mono font-semibold">{setup.interviewFocus.replace("-", " ").toUpperCase()}</span>
                       </div>
                       <div className="flex items-center justify-between text-slate-400">
                         <span>Format & Duration</span>
@@ -520,7 +556,10 @@ export default function DashboardPage() {
                       </div>
                       <div className="flex items-center justify-between text-slate-400">
                         <span>Engine Mode</span>
-                        <span className="text-emerald-400 font-medium">Gemini AI Adaptive Simulation</span>
+                        <span className="text-emerald-400 font-medium flex items-center gap-1">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Gemini AI Real-time Evaluation
+                        </span>
                       </div>
                     </div>
                   </CardContent>
@@ -528,7 +567,7 @@ export default function DashboardPage() {
                     <Button
                       onClick={() => handleStartNewInterview()}
                       isLoading={isStarting}
-                      className="w-full sm:w-auto gap-2 shadow-lg shadow-indigo-950/60 font-semibold"
+                      className="w-full sm:w-auto gap-2 shadow-lg shadow-indigo-600/25 font-bold h-10 px-5"
                     >
                       <Play className="h-4 w-4 fill-current" />
                       Start Live Session Now
@@ -540,11 +579,11 @@ export default function DashboardPage() {
                 </Card>
 
                 {/* Right: Key Skills Readiness Radar */}
-                <Card className="bg-[#10182b]">
+                <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm text-white">Competency Diagnostics</CardTitle>
                     <CardDescription>
-                      Synthesized across {reports.length} verified interview evaluations.
+                      Synthesized across {reports.length} verified interview evaluation{reports.length > 1 ? "s" : ""}.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3.5">
@@ -565,7 +604,7 @@ export default function DashboardPage() {
                   <CardFooter className="pt-2">
                     <button
                       onClick={() => setActiveTab("skills")}
-                      className="w-full text-xs text-center text-slate-400 hover:text-indigo-300 transition-colors"
+                      className="w-full text-xs text-center text-slate-400 hover:text-indigo-300 transition-colors font-medium"
                     >
                       View Full Competency Breakdown →
                     </button>
@@ -575,11 +614,11 @@ export default function DashboardPage() {
 
               {/* Score Trend (Displayed only when 2+ historical evaluations exist) */}
               {analytics.scoreTrend && (
-                <Card className="bg-[#10182b] border-[#1e2d4f] p-5">
+                <Card className="p-5 hover:border-indigo-500/40 transition-all">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-white text-base">Historical Evaluation Trajectory</h3>
+                        <h3 className="font-bold text-white text-base">Historical Evaluation Trajectory</h3>
                         <Badge
                           variant={analytics.scoreTrend.isUp ? "success" : "default"}
                           className="font-mono text-xs gap-1"
@@ -602,18 +641,18 @@ export default function DashboardPage() {
                     {reports.slice(0, 4).map((r, i) => (
                       <div
                         key={r.sessionId}
-                        className="p-3.5 rounded-lg border border-[#1e2d4f] bg-[#0c1222] space-y-1.5"
+                        className="p-4 rounded-xl border border-[#1e2d4f] bg-[#0a0f1d] space-y-2 hover:border-indigo-700/50 transition-all"
                       >
                         <div className="flex justify-between items-center text-xs">
                           <span className="text-slate-400 font-mono text-[10px]">
                             {i === 0 ? "Latest Session" : `Session -${i}`}
                           </span>
-                          <span className="font-bold text-indigo-300 font-mono text-sm">
+                          <span className="font-bold text-indigo-300 font-mono text-base">
                             {r.overallScore}%
                           </span>
                         </div>
-                        <p className="text-xs font-medium text-white truncate">{r.targetRole}</p>
-                        <p className="text-[10px] text-slate-500">{r.completedAt}</p>
+                        <p className="text-xs font-semibold text-white truncate">{r.targetRole}</p>
+                        <p className="text-[10px] text-slate-500 font-mono">{r.completedAt}</p>
                       </div>
                     ))}
                   </div>
@@ -622,9 +661,11 @@ export default function DashboardPage() {
 
               {/* Single Evaluation Note */}
               {reports.length === 1 && (
-                <div className="rounded-xl border border-[#1e2d4f] bg-[#0c1222] p-4 text-xs text-slate-400 flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-2.5">
-                    <BarChart3 className="h-4 w-4 text-indigo-400 shrink-0" />
+                <div className="rounded-2xl border border-indigo-900/40 bg-gradient-to-r from-indigo-950/40 via-[#0c1222] to-[#070b14] p-4.5 text-xs text-slate-300 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-lg bg-indigo-950 flex items-center justify-center text-indigo-400 border border-indigo-800/60 shrink-0">
+                      <BarChart3 className="h-4 w-4" />
+                    </div>
                     <span>
                       <strong>1 Evaluation Recorded:</strong> Complete a second interview to unlock historical score progression trends and trajectory comparison.
                     </span>
@@ -633,17 +674,18 @@ export default function DashboardPage() {
                     size="sm"
                     variant="secondary"
                     onClick={() => handleStartNewInterview()}
-                    className="shrink-0 text-xs gap-1"
+                    className="shrink-0 text-xs gap-1.5"
                   >
+                    <PlusCircle className="h-3.5 w-3.5" />
                     Take 2nd Interview
                   </Button>
                 </div>
               )}
 
               {/* Recent Completed Evaluations Preview */}
-              <div className="space-y-3">
+              <div className="space-y-3.5">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
                     Recent Completed Evaluations
                   </h2>
                   <button
@@ -658,7 +700,7 @@ export default function DashboardPage() {
                   {reports.slice(0, 2).map((rep) => (
                     <Card
                       key={rep.sessionId}
-                      className="hover:border-indigo-800/60 transition-colors bg-[#10182b]"
+                      className="hover:border-indigo-600/50 transition-all bg-[#0f172a]/95 hover:-translate-y-0.5"
                     >
                       <CardHeader className="pb-2">
                         <div className="flex items-center justify-between">
@@ -684,7 +726,7 @@ export default function DashboardPage() {
                       </CardContent>
                       <CardFooter className="pt-2">
                         <Link href={`/report/${rep.sessionId}`} className="w-full">
-                          <Button variant="outline" size="sm" className="w-full gap-2 text-xs border-[#22304e] hover:border-indigo-600/60">
+                          <Button variant="outline" size="sm" className="w-full gap-2 text-xs border-indigo-900/40 hover:border-indigo-500/60">
                             Inspect Verified Report
                             <ArrowRight className="h-3.5 w-3.5" />
                           </Button>
@@ -697,8 +739,8 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* 3. SCORING SCALE EXPLANATION (Standardized Evaluation Rubric) */}
-          <Card className="bg-[#10182b] border-[#1e2d4f]">
+          {/* 4. SCORING SCALE EXPLANATION (Standardized Evaluation Rubric) */}
+          <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4 text-indigo-400" />
@@ -710,34 +752,34 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 text-xs">
-                <div className="p-3.5 rounded-lg border border-emerald-900/50 bg-emerald-950/20 space-y-1">
+                <div className="p-4 rounded-xl border border-emerald-800/40 bg-emerald-950/20 space-y-1.5 hover:border-emerald-700/60 transition-colors">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-emerald-300">88% – 100%</span>
+                    <span className="font-bold text-emerald-300 text-sm">88% – 100%</span>
                     <Badge variant="success" className="text-[10px]">Strong Hire</Badge>
                   </div>
-                  <p className="text-slate-300 font-medium">Mastery & Architecture</p>
+                  <p className="text-slate-200 font-semibold">Mastery & Architecture</p>
                   <p className="text-slate-400 text-[11px] leading-relaxed">
                     Proactively addresses trade-offs, concurrency bottlenecks, and failure edge cases with precise technical terminology.
                   </p>
                 </div>
 
-                <div className="p-3.5 rounded-lg border border-indigo-900/50 bg-indigo-950/20 space-y-1">
+                <div className="p-4 rounded-xl border border-indigo-800/40 bg-indigo-950/20 space-y-1.5 hover:border-indigo-700/60 transition-colors">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-indigo-300">72% – 87%</span>
+                    <span className="font-bold text-indigo-300 text-sm">72% – 87%</span>
                     <Badge variant="indigo" className="text-[10px]">Hire Recommendation</Badge>
                   </div>
-                  <p className="text-slate-300 font-medium">Proficient & Practical</p>
+                  <p className="text-slate-200 font-semibold">Proficient & Practical</p>
                   <p className="text-slate-400 text-[11px] leading-relaxed">
                     Solid implementation ability and clear conceptual grasp; minor gaps in scalability extremes or recovery degradation.
                   </p>
                 </div>
 
-                <div className="p-3.5 rounded-lg border border-amber-900/50 bg-amber-950/20 space-y-1">
+                <div className="p-4 rounded-xl border border-amber-800/40 bg-amber-950/20 space-y-1.5 hover:border-amber-700/60 transition-colors">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-amber-300">Below 72%</span>
+                    <span className="font-bold text-amber-300 text-sm">Below 72%</span>
                     <Badge variant="default" className="text-[10px]">Additional Review</Badge>
                   </div>
-                  <p className="text-slate-300 font-medium">Foundational Review</p>
+                  <p className="text-slate-200 font-semibold">Foundational Review</p>
                   <p className="text-slate-400 text-[11px] leading-relaxed">
                     Answers lack depth or miss essential core keywords; targeted practice recommended to solidify fundamental patterns.
                   </p>
@@ -755,7 +797,7 @@ export default function DashboardPage() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-base font-semibold text-white">
+              <h2 className="text-base font-bold text-white">
                 Evaluation Archives & Audit Logs
               </h2>
               <p className="text-xs text-slate-400">
@@ -780,12 +822,12 @@ export default function DashboardPage() {
               {reports.map((rep) => (
                 <Card
                   key={rep.sessionId}
-                  className="bg-[#10182b] hover:border-indigo-800/60 transition-colors"
+                  className="hover:border-indigo-700/60 transition-colors"
                 >
                   <div className="p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <div className="space-y-1.5 max-w-2xl">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-white text-base">
+                        <span className="font-bold text-white text-base">
                           {rep.targetRole}
                         </span>
                         <Badge variant={rep.overallScore >= 88 ? "success" : rep.overallScore >= 72 ? "indigo" : "default"}>
@@ -817,7 +859,7 @@ export default function DashboardPage() {
                         size="sm"
                         variant="outline"
                         onClick={() => handleStartNewInterview(rep.targetRole as TargetRole)}
-                        className="gap-1.5 text-xs border-[#22304e] hover:border-indigo-600/60"
+                        className="gap-1.5 text-xs border-indigo-900/40 hover:border-indigo-600/60"
                       >
                         <RefreshCw className="h-3.5 w-3.5 text-slate-400" />
                         Retake
@@ -837,13 +879,13 @@ export default function DashboardPage() {
       {activeTab === "skills" && (
         <div className="space-y-6">
           {reports.length === 0 ? (
-            <Card className="bg-[#10182b] border-[#1e2d4f] p-8 text-center space-y-4">
-              <div className="h-12 w-12 rounded-full bg-indigo-950/60 border border-indigo-800/40 flex items-center justify-center text-indigo-400 mx-auto">
+            <Card className="p-8 text-center space-y-4">
+              <div className="h-12 w-12 rounded-2xl bg-indigo-950/70 border border-indigo-800/40 flex items-center justify-center text-indigo-400 mx-auto">
                 <BrainCircuit className="h-6 w-6" />
               </div>
               <div className="space-y-1 max-w-md mx-auto">
-                <h3 className="text-base font-semibold text-white">Competency Diagnostics Pending</h3>
-                <p className="text-xs text-slate-400">
+                <h3 className="text-base font-bold text-white">Competency Diagnostics Pending</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
                   Granular skill analytics and targeted learning roadmaps are synthesized from your actual responses during live interviews. Complete an interview to unlock this data.
                 </p>
               </div>
@@ -859,11 +901,11 @@ export default function DashboardPage() {
           ) : (
             <>
               {/* Competency Grid */}
-              <Card className="bg-[#10182b]">
+              <Card>
                 <CardHeader>
                   <CardTitle>Skill Matrix & Proficiency Diagnostics</CardTitle>
                   <CardDescription>
-                    Granular competencies calibrated against your actual answers across {reports.length} evaluation sessions.
+                    Granular competencies calibrated against your actual answers across {reports.length} evaluation session{reports.length > 1 ? "s" : ""}.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -871,10 +913,10 @@ export default function DashboardPage() {
                     {analytics.competencies.map((metric) => (
                       <div
                         key={metric.category}
-                        className="space-y-2 p-4 rounded-xl border border-[#1e2d4f] bg-[#0c1222]"
+                        className="space-y-2 p-4.5 rounded-2xl border border-[#1e2d4f] bg-[#0a0f1d] hover:border-indigo-700/50 transition-colors"
                       >
                         <div className="flex justify-between items-center text-sm">
-                          <span className="font-semibold text-white truncate max-w-[200px]">
+                          <span className="font-bold text-white truncate max-w-[200px]">
                             {metric.category}
                           </span>
                           <Badge
@@ -897,28 +939,28 @@ export default function DashboardPage() {
 
                   {/* 5. PERSONALIZED PRACTICE RECOMMENDATIONS */}
                   {analytics.allRecommendations.length > 0 && (
-                    <div className="rounded-xl border border-indigo-900/40 bg-indigo-950/20 p-5 space-y-3.5">
-                      <div className="flex items-center gap-2 text-indigo-300 font-semibold text-sm">
-                        <Award className="h-4 w-4 text-indigo-400" />
+                    <div className="rounded-2xl border border-indigo-800/40 bg-indigo-950/20 p-5.5 space-y-3.5">
+                      <div className="flex items-center gap-2 text-indigo-300 font-bold text-sm">
+                        <Award className="h-4.5 w-4.5 text-indigo-400" />
                         <span>Data-Backed Practice Recommendations</span>
                       </div>
                       <p className="text-xs text-slate-400">
                         Derived from actual evaluation gaps identified in your recent interview reports:
                       </p>
-                      <div className="space-y-2">
+                      <div className="space-y-2.5">
                         {analytics.allRecommendations.map((item, idx) => (
                           <div
                             key={idx}
-                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-lg border border-[#1e2d4f] bg-[#0c1222] text-xs"
+                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-[#1e2d4f] bg-[#0a0f1d] text-xs hover:border-indigo-700/50 transition-colors"
                           >
-                            <span className="text-slate-300 leading-relaxed font-medium">
+                            <span className="text-slate-200 leading-relaxed font-medium">
                               • {item}
                             </span>
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() => handleStartNewInterview()}
-                              className="shrink-0 text-[11px] h-7 border-[#22304e] hover:border-indigo-600/60"
+                              className="shrink-0 text-xs h-8 border-indigo-900/50 hover:border-indigo-500/60"
                             >
                               Practice Drill →
                             </Button>
@@ -939,7 +981,7 @@ export default function DashboardPage() {
       {/* ========================================================================= */}
       {activeTab === "settings" && (
         <div className="space-y-4">
-          <Card className="bg-[#10182b]">
+          <Card>
             <CardHeader>
               <CardTitle>Candidate Profile & Calibration Settings</CardTitle>
               <CardDescription>
@@ -948,27 +990,27 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="space-y-4 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="p-3.5 rounded-lg border border-[#1e2d4f] bg-[#0c1222]">
-                  <span className="text-slate-400 block mb-1">Candidate Name</span>
-                  <span className="font-semibold text-white text-sm">
+                <div className="p-4 rounded-xl border border-[#1e2d4f] bg-[#0a0f1d]">
+                  <span className="text-slate-400 block mb-1 font-medium">Candidate Name</span>
+                  <span className="font-bold text-white text-sm">
                     {setup.candidateName || (user ? user.name : "Candidate")}
                   </span>
                 </div>
-                <div className="p-3.5 rounded-lg border border-[#1e2d4f] bg-[#0c1222]">
-                  <span className="text-slate-400 block mb-1">Target Role</span>
-                  <span className="font-semibold text-indigo-300 text-sm">
+                <div className="p-4 rounded-xl border border-[#1e2d4f] bg-[#0a0f1d]">
+                  <span className="text-slate-400 block mb-1 font-medium">Target Role</span>
+                  <span className="font-bold text-indigo-300 text-sm">
                     {roleName}
                   </span>
                 </div>
-                <div className="p-3.5 rounded-lg border border-[#1e2d4f] bg-[#0c1222]">
-                  <span className="text-slate-400 block mb-1">Seniority Calibration</span>
-                  <span className="font-semibold text-white text-sm capitalize">
-                    {setup.experienceLevel}
+                <div className="p-4 rounded-xl border border-[#1e2d4f] bg-[#0a0f1d]">
+                  <span className="text-slate-400 block mb-1 font-medium">Seniority Calibration</span>
+                  <span className="font-bold text-white text-sm capitalize">
+                    {setup.experienceLevel} Level
                   </span>
                 </div>
-                <div className="p-3.5 rounded-lg border border-[#1e2d4f] bg-[#0c1222]">
-                  <span className="text-slate-400 block mb-1">Resume File</span>
-                  <span className="font-semibold text-white text-sm">
+                <div className="p-4 rounded-xl border border-[#1e2d4f] bg-[#0a0f1d]">
+                  <span className="text-slate-400 block mb-1 font-medium">Resume File</span>
+                  <span className="font-bold text-white text-sm truncate block">
                     {setup.resumeFileName || "Default Candidate Profile"}
                   </span>
                 </div>
