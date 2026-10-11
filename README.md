@@ -1,99 +1,102 @@
-# InterviewIQ — Adaptive Technical Interview Simulation Platform
+# Adaptive InterviewIQ — Monorepo (Frontend & Backend)
 
-An intelligent, full-stack AI-driven technical interview platform built with **Next.js 16**, **TypeScript**, **Tailwind CSS**, and **Google Gemini API**.
+Welcome to the **Adaptive InterviewIQ** repository! The codebase is cleanly separated into dedicated **`frontend/`** and **`backend/`** directories so all 5 team members can collaborate without code collisions or merge conflicts.
 
----
-
-## 🚀 Key Features
-
-- **Live Adaptive Technical Interviews**: Dynamic multi-branch questioning tailored to candidate target role, seniority level, and focus area.
-- **Real-Time Gemini AI Evaluation**: Rubric-based scoring on technical correctness, conceptual depth, trade-off awareness, and communication clarity.
-- **Resume Ingestion & Verification**: Drag-and-drop resume upload (.pdf, .docx, .txt) with an in-browser preview modal to ensure the right resume is submitted before starting.
-- **Comprehensive Scorecards & Reports**: Detailed evidence-backed analytics with direct quote citations, competency radar breakdowns, and customized study roadmaps.
-- **Recruiter Pipeline**: Dedicated recruiter dashboard tab with status management (Shortlisted, Under Review, Pending, Rejected) and candidate filtering.
-- **Authentication & Multi-Session**: Secure candidate and recruiter portal with PBKDF2 password hashing, HTTP-only session cookies, and quick logout across all views.
-
----
-
-## 👥 Getting Started (Team Guide)
-
-### 1. Clone the Repository
-```bash
-git clone https://github.com/ayushkumarsingh20072007-svg/adaptive-interview.git
-cd adaptive-interview
+```
+adaptive-interview/
+├── frontend/             # 🎨 Frontend Web App (Next.js 16, React, Tailwind CSS)
+│   ├── src/
+│   │   ├── app/          # Pages (Landing, Setup, Dashboard, Interview, Report, Auth)
+│   │   ├── components/   # UI & Workspace components
+│   │   └── lib/          # Client state, storage & API client
+│   ├── public/           # Static assets & icons
+│   ├── .env.example      # Frontend environment template
+│   └── package.json
+│
+├── backend/              # ⚙️ Backend API Service (Express, TypeScript, Gemini AI)
+│   ├── src/
+│   │   ├── routes/       # Auth & Interview endpoints
+│   │   ├── services/     # Gemini AI client & PBKDF2 auth service
+│   │   ├── types/        # TypeScript data contracts
+│   │   └── server.ts     # Express server entry point
+│   ├── .env.example      # Backend environment template
+│   └── package.json
+│
+├── package.json          # Root workspace scripts
+└── README.md             # This guide
 ```
 
-### 2. Install Dependencies
+---
+
+## 👥 Team Workflows
+
+### 🎨 1. Frontend Team (Next.js & UI)
+If you are developing the user interface, interview simulation workspace, or scorecards:
 ```bash
+# Navigate to frontend folder
+cd frontend
+
+# Install dependencies
 npm install
-```
 
-### 3. Set Up Environment Variables
-Copy the template environment file:
-```bash
+# Setup environment
 cp .env.example .env.local
-```
-Then open `.env.local` and insert your Google Gemini API key:
-```env
-GEMINI_API_KEY=your_gemini_api_key_here
-```
-*(You can obtain a free key from [Google AI Studio](https://aistudio.google.com/app/apikey)).*
 
-### 4. Run the Development Server
-```bash
+# Run frontend dev server (runs on http://localhost:3000)
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### ⚙️ 2. Backend Team (APIs, Auth & Gemini AI)
+If you are working on the Gemini AI prompts, interview engine, evaluation rubrics, or authentication:
+```bash
+# Navigate to backend folder
+cd backend
+
+# Install dependencies
+npm install
+
+# Setup environment
+cp .env.example .env
+
+# Run backend API server (runs on http://localhost:5000)
+npm run dev
+```
 
 ---
 
-## 🔑 Demo Accounts for Quick Testing
+## ⚡ Root Quick Commands
 
-You can use these pre-configured accounts or sign up for a new account on the `/signup` page:
+From the project root, you can also run convenient workspace commands:
+
+| Command | Action |
+| :--- | :--- |
+| `npm run dev:frontend` | Starts the Next.js frontend on `http://localhost:3000` |
+| `npm run dev:backend` | Starts the Express backend API on `http://localhost:5000` |
+| `npm run build:frontend` | Builds production bundle for frontend |
+| `npm run build:backend` | Compiles backend TypeScript to `/dist` |
+
+---
+
+## 🔑 Environment Setup for Team
+
+1. **Backend (`backend/.env`)**:
+   ```env
+   PORT=5000
+   FRONTEND_URL=http://localhost:3000
+   GEMINI_API_KEY=your_gemini_api_key_here
+   ```
+2. **Frontend (`frontend/.env.local`)**:
+   ```env
+   NEXT_PUBLIC_API_URL=http://localhost:5000
+   GEMINI_API_KEY=your_gemini_api_key_here
+   ```
+*(Get your free Google Gemini API key at [Google AI Studio](https://aistudio.google.com/app/apikey)).*
+
+---
+
+## 🧪 Demo Test Credentials
 
 | Role | Email | Password |
 | :--- | :--- | :--- |
 | **Recruiter** | `recruiter@interviewiq.ai` | `Password123` |
 | **Candidate** | `candidate@interviewiq.ai` | `Password123` |
-
----
-
-## 🛠️ Tech Stack
-
-- **Framework**: Next.js 16 (App Router)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS & Vanilla Design System
-- **AI Engine**: Google Gemini API (`@google/genai`)
-- **Icons**: Lucide React
-- **Security**: PBKDF2 salted hash password verification & HTTP-only cookies
-
----
-
-## 📁 Project Architecture
-
-```
-interview/
-├── src/
-│   ├── app/
-│   │   ├── api/
-│   │   │   ├── auth/          # Login, Register, Logout, Me endpoints
-│   │   │   └── interview/     # Generate Question, Evaluate Answer, Next Question
-│   │   ├── dashboard/         # Command center, history, analytics, recruiter pipeline
-│   │   ├── interview/[id]/    # Live interview simulation workspace
-│   │   ├── login/             # Candidate & Recruiter sign-in
-│   │   ├── signup/            # Account registration
-│   │   ├── setup/             # Interview calibration & resume verification
-│   │   └── report/[id]/       # Comprehensive audit scorecard
-│   ├── components/
-│   │   ├── interview/         # Live question workspace & editor
-│   │   ├── layout/            # Navbar, footer
-│   │   ├── report/            # Evaluation report view
-│   │   └── ui/                # Reusable UI primitives (modal, badge, button, card)
-│   └── lib/
-│       ├── ai-client.ts       # Frontend client for AI routes
-│       ├── auth-context.tsx   # React auth context & hook
-│       ├── gemini.ts          # Server-side Gemini API client
-│       ├── mock-data.ts       # Curated question banks & demo reports
-│       ├── storage.ts         # Local session persistence
-│       └── types.ts           # Core TypeScript data contracts
-```
