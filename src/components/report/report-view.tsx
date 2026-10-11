@@ -33,6 +33,59 @@ interface ReportViewProps {
   sessionId: string;
 }
 
+function getConsistencyAnalysis(
+  answerRecords: EvaluationReport["answerRecords"],
+  overallScore: number
+): { label: "High" | "Moderate" | "Low" | "Variable" | "N/A"; colorClass: string } {
+  if (!answerRecords || answerRecords.length === 0) {
+    return { label: "N/A", colorClass: "text-slate-400" };
+  }
+
+  const scores = answerRecords.map((a) => a.feedback?.score ?? 0);
+
+  // If candidate overall score is 0 or all answers scored 0
+  if (overallScore === 0 || scores.every((s) => s === 0)) {
+    return { label: "Low", colorClass: "text-rose-400" };
+  }
+
+  const mean = scores.reduce((sum, s) => sum + s, 0) / scores.length;
+  const variance = scores.reduce((sum, s) => sum + Math.pow(s - mean, 2), 0) / scores.length;
+  const stdDev = Math.sqrt(variance);
+
+  // High performance with low variance
+  if (mean >= 75 && stdDev <= 16) {
+    return { label: "High", colorClass: "text-emerald-400" };
+  }
+
+  // Large swing across questions (e.g. one question 90, another 20)
+  if (stdDev > 22) {
+    return { label: "Variable", colorClass: "text-amber-400" };
+  }
+
+  // Moderate score range with stable delivery
+  if (mean >= 50) {
+    return { label: "Moderate", colorClass: "text-indigo-300" };
+  }
+
+  return { label: "Low", colorClass: "text-rose-400" };
+}
+
+function getReadinessDescription(overallScore: number): string {
+  if (overallScore >= 88) {
+    return "Candidate demonstrated structured problem decomposition and consistent architectural articulation under adaptive prompting.";
+  }
+  if (overallScore >= 72) {
+    return "Candidate exhibited solid foundational concepts and practical implementation skills, with minor gaps under complex probing.";
+  }
+  if (overallScore >= 45) {
+    return "Candidate displayed developing competencies across core areas, but needs targeted practice in depth and system trade-offs.";
+  }
+  if (overallScore > 0) {
+    return "Candidate attempted core questions but demonstrated significant conceptual gaps and incomplete responses across evaluated domains.";
+  }
+  return "Candidate responses lacked required technical depth or were left incomplete, requiring comprehensive foundational practice across all core domains.";
+}
+
 export function ReportView({ sessionId }: ReportViewProps) {
   const router = useRouter();
   const isMounted = useIsMounted();
@@ -147,7 +200,15 @@ export function ReportView({ sessionId }: ReportViewProps) {
     );
   }
 
-  const isStrong = report.overallScore >= 88;
+  const consistency = getConsistencyAnalysis(report.answerRecords, report.overallScore);
+  const readinessDescription = getReadinessDescription(report.overallScore);
+
+  const verdictVariant: "success" | "indigo" | "warning" =
+    report.verdict === "Strong Hire Recommendation"
+      ? "success"
+      : report.verdict === "Hire Recommendation"
+      ? "indigo"
+      : "warning";
 
   return (
     <div className="flex flex-col gap-8 max-w-5xl mx-auto w-full py-4">
@@ -205,7 +266,7 @@ export function ReportView({ sessionId }: ReportViewProps) {
         <Card className="md:col-span-2 border-indigo-900/40 bg-gradient-to-br from-[#10182b] to-[#0c1222]">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <Badge variant={isStrong ? "success" : "indigo"}>
+              <Badge variant={verdictVariant}>
                 {report.verdict}
               </Badge>
               <span className="text-xs text-slate-400 font-mono">
@@ -241,8 +302,8 @@ export function ReportView({ sessionId }: ReportViewProps) {
               </div>
               <div className="p-3 rounded-lg border border-[#1e2d4f] bg-[#0c1222]">
                 <span className="text-[11px] text-slate-400 block">Consistency</span>
-                <span className="text-2xl font-bold text-emerald-400 mt-1 block">
-                  High
+                <span className={`text-2xl font-bold ${consistency.colorClass} mt-1 block`}>
+                  {consistency.label}
                 </span>
               </div>
             </div>
@@ -262,7 +323,7 @@ export function ReportView({ sessionId }: ReportViewProps) {
               <span className="text-sm text-slate-400 font-mono">/ 100</span>
             </div>
             <p className="text-xs text-slate-300 leading-relaxed pt-1">
-              Candidate demonstrated structured problem decomposition and consistent architectural articulation under adaptive prompting.
+              {readinessDescription}
             </p>
           </div>
           <div className="pt-4 border-t border-[#1a2642]">
@@ -281,26 +342,46 @@ export function ReportView({ sessionId }: ReportViewProps) {
           Competency & Skill-Level Breakdown
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {report.metrics.map((metric) => (
-            <Card key={metric.category} className="bg-[#10182b] p-4">
-              <div className="flex justify-between items-center mb-2">
-                <span className="font-semibold text-sm text-white">
-                  {metric.category}
-                </span>
-                <Badge variant={metric.score >= 90 ? "success" : "indigo"}>
-                  {metric.level} • {metric.score}%
-                </Badge>
-              </div>
-              <Progress
-                value={metric.score}
-                indicatorColor={metric.score >= 90 ? "emerald" : "indigo"}
-                size="md"
-              />
-              <p className="text-[11px] text-slate-400 mt-2">
-                Supported by {metric.totalEvaluated} answer turns with verified keyword density.
-              </p>
-            </Card>
-          ))}
+          {report.metrics.map((metric) => {
+            const metricBadgeVariant: "success" | "indigo" | "warning" | "danger" =
+              metric.score >= 85
+                ? "success"
+                : metric.score >= 60
+                ? "indigo"
+                : metric.score >= 35
+                ? "warning"
+                : "danger";
+
+            const metricIndicatorColor: "emerald" | "indigo" | "amber" | "rose" =
+              metric.score >= 85
+                ? "emerald"
+                : metric.score >= 60
+                ? "indigo"
+                : metric.score >= 35
+                ? "amber"
+                : "rose";
+
+            return (
+              <Card key={metric.category} className="bg-[#10182b] p-4">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="font-semibold text-sm text-white">
+                    {metric.category}
+                  </span>
+                  <Badge variant={metricBadgeVariant}>
+                    {metric.level} • {metric.score}%
+                  </Badge>
+                </div>
+                <Progress
+                  value={metric.score}
+                  indicatorColor={metricIndicatorColor}
+                  size="md"
+                />
+                <p className="text-[11px] text-slate-400 mt-2">
+                  Supported by {metric.totalEvaluated} answer turns with verified keyword density.
+                </p>
+              </Card>
+            );
+          })}
         </div>
       </div>
 
