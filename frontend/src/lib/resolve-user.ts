@@ -17,7 +17,7 @@ export interface AuthResult {
  * Parse the interviewiq_session cookie from a raw Request and resolve the user.
  * Never throws — returns { authenticated: false } on any failure.
  */
-export function resolveRequestUser(request: Request): AuthResult {
+export async function resolveRequestUser(request: Request): Promise<AuthResult> {
   try {
     const cookieHeader = request.headers.get("cookie");
     if (!cookieHeader) return { authenticated: false, user: null, userId: "guest" };
@@ -26,7 +26,7 @@ export function resolveRequestUser(request: Request): AuthResult {
     const token = match ? decodeURIComponent(match[1]) : null;
     if (!token) return { authenticated: false, user: null, userId: "guest" };
 
-    const session = getSession(token);
+    const session = await getSession(token);
     if (!session) return { authenticated: false, user: null, userId: "guest" };
 
     return { authenticated: true, user: session.user, userId: session.user.id };

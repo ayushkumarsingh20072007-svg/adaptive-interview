@@ -18,6 +18,31 @@ export default function LoginPage() {
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [quickLoadingEmail, setQuickLoadingEmail] = React.useState<string | null>(null);
+
+  const handleQuickLogin = async (demoEmail: string) => {
+    setError(null);
+    setQuickLoadingEmail(demoEmail);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: demoEmail, password: "Password123" }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to sign in demo user.");
+        return;
+      }
+      await refreshUser();
+      router.push("/dashboard");
+    } catch (err) {
+      console.error("Demo login error:", err);
+      setError("An unexpected network error occurred.");
+    } finally {
+      setQuickLoadingEmail(null);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,7 +138,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-14rem)] py-8 px-4">
-      <div className="w-full max-w-md space-y-6">
+      <div className="w-full max-w-lg space-y-6">
         {/* Back Link */}
         <Link
           href="/"
@@ -127,19 +152,149 @@ export default function LoginPage() {
         <div className="text-center space-y-2">
           <div className="inline-flex items-center gap-1.5 rounded-full border border-indigo-800/60 bg-indigo-950/60 px-3 py-1 text-xs font-medium text-indigo-300">
             <Sparkles className="h-3 w-3 text-indigo-400" />
-            <span>Secure Candidate Portal</span>
+            <span>Role-Based Authentication & Access</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
             Sign In to InterviewIQ
           </h1>
           <p className="text-xs sm:text-sm text-slate-400">
-            Access your interview history, persistent scorecards, and tailored roadmaps.
+            Company Head pipeline command center or personalized candidate portal.
           </p>
         </div>
 
-        {/* Card Form */}
+        {/* 1-CLICK DEMO EVALUATOR SWITCHER (GLASSMORPHISM CARD) */}
+        <div className="relative rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-950/40 via-[#0c1222]/80 to-purple-950/20 backdrop-blur-xl p-5 shadow-2xl shadow-indigo-950/50 space-y-4">
+          <div className="flex items-center justify-between border-b border-indigo-900/40 pb-3">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-xs font-bold text-white uppercase tracking-wider">
+                1-Click Demo Profiles (Evaluator Quick Access)
+              </span>
+            </div>
+            <Badge variant="indigo" className="text-[10px]">Instant Sign In</Badge>
+          </div>
+
+          <div className="space-y-3">
+            {/* 1. COMPANY HEAD (RECRUITER) */}
+            <div className="rounded-xl border border-violet-500/30 bg-violet-950/20 p-3 hover:border-violet-500/60 transition-all">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-bold text-white">Sarah Jenkins</span>
+                    <Badge variant="success" className="text-[10px] py-0 px-1.5">Company Head</Badge>
+                  </div>
+                  <p className="text-[11px] text-violet-300 font-medium">TechCorp Global · Head of Technical Talent</p>
+                  <p className="text-[10px] text-slate-400">Access all candidate records, view scores & shortlist authority</p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => handleQuickLogin("recruiter@interviewiq.ai")}
+                  isLoading={quickLoadingEmail === "recruiter@interviewiq.ai"}
+                  className="bg-violet-600 hover:bg-violet-500 text-white text-xs h-8 px-3 shrink-0 shadow-md shadow-violet-950/50"
+                >
+                  Sign In as Head
+                  <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                </Button>
+              </div>
+            </div>
+
+            {/* 2. CANDIDATES */}
+            <div className="space-y-2 pt-1">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                Candidate Portals (Strict Privacy & Isolated Views):
+              </span>
+
+              {/* Candidate 1: Alex Rivera */}
+              <div className="rounded-lg border border-indigo-900/40 bg-[#090e1c]/70 p-2.5 flex items-center justify-between gap-2 hover:border-indigo-600/50 transition-colors">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs font-bold text-white">Alex Rivera</span>
+                    <span className="text-[10px] font-mono text-emerald-400 font-semibold bg-emerald-950/60 border border-emerald-800/40 px-1.5 py-0.2 rounded">88% · Shortlisted ⭐</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 truncate">Full Stack Developer · Next.js & Concurrency</p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleQuickLogin("alex.rivera@example.com")}
+                  isLoading={quickLoadingEmail === "alex.rivera@example.com"}
+                  className="text-xs h-7 px-2.5 text-indigo-300 border-indigo-800/60 hover:bg-indigo-950/50 shrink-0"
+                >
+                  View as Alex
+                </Button>
+              </div>
+
+              {/* Candidate 2: Maya Patel */}
+              <div className="rounded-lg border border-indigo-900/40 bg-[#090e1c]/70 p-2.5 flex items-center justify-between gap-2 hover:border-indigo-600/50 transition-colors">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs font-bold text-white">Maya Patel</span>
+                    <span className="text-[10px] font-mono text-emerald-400 font-semibold bg-emerald-950/60 border border-emerald-800/40 px-1.5 py-0.2 rounded">86% · Shortlisted ⭐</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 truncate">Frontend Engineer · React 19 & Web Performance</p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleQuickLogin("maya.patel@example.com")}
+                  isLoading={quickLoadingEmail === "maya.patel@example.com"}
+                  className="text-xs h-7 px-2.5 text-indigo-300 border-indigo-800/60 hover:bg-indigo-950/50 shrink-0"
+                >
+                  View as Maya
+                </Button>
+              </div>
+
+              {/* Candidate 3: Liam Chen */}
+              <div className="rounded-lg border border-indigo-900/40 bg-[#090e1c]/70 p-2.5 flex items-center justify-between gap-2 hover:border-indigo-600/50 transition-colors">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs font-bold text-white">Liam Chen</span>
+                    <span className="text-[10px] font-mono text-amber-400 font-semibold bg-amber-950/60 border border-amber-800/40 px-1.5 py-0.2 rounded">78% · Under Review ⏳</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 truncate">Backend Developer · PostgreSQL Internals</p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleQuickLogin("liam.chen@example.com")}
+                  isLoading={quickLoadingEmail === "liam.chen@example.com"}
+                  className="text-xs h-7 px-2.5 text-indigo-300 border-indigo-800/60 hover:bg-indigo-950/50 shrink-0"
+                >
+                  View as Liam
+                </Button>
+              </div>
+
+              {/* Candidate 4: Rohan Gupta */}
+              <div className="rounded-lg border border-indigo-900/40 bg-[#090e1c]/70 p-2.5 flex items-center justify-between gap-2 hover:border-indigo-600/50 transition-colors">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs font-bold text-white">Rohan Gupta</span>
+                    <span className="text-[10px] font-mono text-amber-400 font-semibold bg-amber-950/60 border border-amber-800/40 px-1.5 py-0.2 rounded">68% · Under Review ⏳</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 truncate">Python Developer · Concurrency & Memory</p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleQuickLogin("rohan.gupta@example.com")}
+                  isLoading={quickLoadingEmail === "rohan.gupta@example.com"}
+                  className="text-xs h-7 px-2.5 text-indigo-300 border-indigo-800/60 hover:bg-indigo-950/50 shrink-0"
+                >
+                  View as Rohan
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Regular Custom Sign-In Form */}
         <Card className="border-[#1e2d4f] bg-[#0c1222] shadow-2xl shadow-indigo-950/40">
           <CardContent className="pt-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-300">Or Sign In with Custom Email:</span>
+              <span className="text-[11px] text-slate-500 font-mono">Default Demo Pass: Password123</span>
+            </div>
+
             {error && (
               <div className="rounded-lg border border-rose-800/70 bg-rose-950/30 p-3 text-xs text-rose-300 flex items-start gap-2.5">
                 <AlertCircle className="h-4 w-4 shrink-0 text-rose-400 mt-0.5" />
@@ -228,7 +383,7 @@ export default function LoginPage() {
         {/* Security Assurance */}
         <div className="text-center">
           <Badge variant="outline" className="text-[11px] text-slate-400 border-[#1a2642]">
-            Password salted with PBKDF2 · Encrypted HTTP-only Session
+            Role-Based Isolation · Encrypted PBKDF2 Session · Gemini AI Verified
           </Badge>
         </div>
       </div>

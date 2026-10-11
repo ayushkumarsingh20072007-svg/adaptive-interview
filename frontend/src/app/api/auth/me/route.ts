@@ -16,7 +16,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ authenticated: false, user: null }, { status: 200 });
     }
 
-    const session = getSession(token);
+    const session = await getSession(token);
     if (!session) {
       return NextResponse.json({ authenticated: false, user: null }, { status: 200 });
     }

@@ -13,7 +13,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = verifyCredentials(email, password);
+    const result = await verifyCredentials(email, password);
     if ("error" in result) {
       return NextResponse.json({ error: result.error }, { status: 401 });
     }

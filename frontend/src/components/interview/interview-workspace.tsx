@@ -158,6 +158,17 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
     }
 
     loadFirstQuestion();
+
+    // Persist session to SQLite server-side while keeping localStorage fallback
+    const currentActiveSession = getStoredSession(sessionId) || session;
+    if (currentActiveSession) {
+      fetch("/api/interview/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session: currentActiveSession }),
+      }).catch((err) => console.warn("Failed to persist session to server:", err));
+    }
+
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
@@ -237,6 +248,13 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
       setSession(updatedSession);
       saveStoredSession(updatedSession);
 
+      // Persist answer turn to SQLite server-side
+      fetch("/api/interview/answer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.id, answer: record }),
+      }).catch((err) => console.warn("Failed to persist answer to server:", err));
+
       // Question limit: automatically complete interview if target question count reached
       const targetQuestions = session.setup.interviewLength === 10 ? 3 : session.setup.interviewLength === 20 ? 5 : 7;
       if (updatedAnswers.length >= targetQuestions) {
@@ -314,20 +332,42 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
       if (isAiPowered && targetSession.answers.length > 0) {
         report = await aiGenerateReport(targetSession);
       } else {
-        // Import and use the mock report generator
-        const { generateEvaluationReport } = await import("@/lib/interview-engine");
-        report = generateEvaluationReport(targetSession);
+        // Use server route with forceDeterministic to guarantee persistence in SQLite
+        const res = await fetch("/api/interview/generate-report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session: targetSession, forceDeterministic: true }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          report = data.report;
+        } else {
+          const { generateEvaluationReport } = await import("@/lib/interview-engine");
+          report = generateEvaluationReport(targetSession);
+        }
       }
-      if (user?.id && !report.userId) {
+      if (user?.id) {
         report.userId = user.id;
+      }
+      if (user?.name) {
+        report.candidateName = user.name;
+      }
+      if (!report.shortlistStatus) {
+        report.shortlistStatus = "pending";
       }
       saveStoredReport(report);
     } catch (err) {
       console.error("Report generation error:", err);
       const { generateEvaluationReport } = await import("@/lib/interview-engine");
       const report = generateEvaluationReport(targetSession);
-      if (user?.id && !report.userId) {
+      if (user?.id) {
         report.userId = user.id;
+      }
+      if (user?.name) {
+        report.candidateName = user.name;
+      }
+      if (!report.shortlistStatus) {
+        report.shortlistStatus = "pending";
       }
       saveStoredReport(report);
     }

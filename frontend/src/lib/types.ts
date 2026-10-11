@@ -95,11 +95,41 @@ export interface InterviewSession {
   userId?: string;
 }
 
+export type SkillStatusCategory =
+  | "demonstrated"
+  | "claimed_unvalidated"
+  | "not_assessed";
+
+export interface EvidenceCitation {
+  quote: string; // Verbatim substring from candidate answer
+  context: string; // Why this quote supports or does not support the evaluation
+  competency: string; // Associated skill / topic area
+  questionIndex: number; // 1-indexed (e.g. 1 for Q1)
+  questionText?: string;
+  confidence: "high" | "medium" | "low";
+  status: SkillStatusCategory;
+}
+
+export interface RecruiterFollowUp {
+  id?: string;
+  question: string;
+  targetSkill: string;
+  rationale: string;
+  verificationContext?: string;
+  uncertaintyLevel?: "low" | "medium" | "high";
+}
+
 export interface SkillMetric {
   category: string;
   score: number; // 0 - 100
   level: "Needs Focus" | "Developing" | "Proficient" | "Mastery";
   totalEvaluated: number;
+  status?: SkillStatusCategory;
+  confidence?: "high" | "medium" | "low";
+  explanation?: string;
+  rubricCriteria?: string[];
+  evidenceQuote?: string;
+  questionReference?: string;
 }
 
 export interface EvaluationReport {
@@ -121,5 +151,12 @@ export interface EvaluationReport {
   userId?: string;
   shortlistStatus?: ShortlistStatus;
   shortlistNotes?: string;
+  evidenceCitations?: EvidenceCitation[];
+  recruiterFollowUps?: RecruiterFollowUp[];
+  skillStatusCounts?: {
+    demonstrated: number;
+    claimedUnvalidated: number;
+    notAssessed: number;
+  };
 }
 

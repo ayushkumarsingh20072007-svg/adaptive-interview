@@ -8,12 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import { useIsMounted } from "@/lib/use-mounted";
 
 export function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const { user, isLoading, logout } = useAuth();
+  const isMounted = useIsMounted();
 
   async function handleLogout() {
     await logout();
@@ -73,41 +75,45 @@ export function Navbar() {
 
         {/* Right Action buttons */}
         <div className="hidden sm:flex items-center gap-3">
-          {!isLoading && user ? (
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#141e34] border border-[#1e2d4f] text-xs text-slate-200">
-                <User className="h-3.5 w-3.5 text-indigo-400" />
-                <span className="max-w-[120px] truncate font-medium">{user.name}</span>
-                {user.role === "recruiter" && (
-                  <Badge variant="indigo" className="text-[9px] py-0 px-1 ml-0.5">Recruiter</Badge>
-                )}
+          {isMounted && !isLoading ? (
+            user ? (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#141e34] border border-[#1e2d4f] text-xs text-slate-200">
+                  <User className="h-3.5 w-3.5 text-indigo-400" />
+                  <span className="max-w-[120px] truncate font-medium">{user.name}</span>
+                  {user.role === "recruiter" && (
+                    <Badge variant="indigo" className="text-[9px] py-0 px-1 ml-0.5">Recruiter</Badge>
+                  )}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLogout}
+                  className="text-xs text-rose-300 border-rose-900/50 hover:text-white hover:bg-rose-950/40 gap-1.5 h-8 px-2.5"
+                  title="Log out of account"
+                >
+                  <LogOut className="h-3.5 w-3.5 text-rose-400" />
+                  <span>Log Out</span>
+                </Button>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleLogout}
-                className="text-xs text-rose-300 border-rose-900/50 hover:text-white hover:bg-rose-950/40 gap-1.5 h-8 px-2.5"
-                title="Log out of account"
-              >
-                <LogOut className="h-3.5 w-3.5 text-rose-400" />
-                <span>Log Out</span>
-              </Button>
-            </div>
-          ) : !isLoading ? (
-            <div className="flex items-center gap-2">
-              <Link href="/login">
-                <Button variant="ghost" size="sm" className="text-slate-300 hover:text-white text-xs">
-                  <LogIn className="h-3.5 w-3.5 mr-1 text-slate-400" />
-                  Sign In
-                </Button>
-              </Link>
-              <Link href="/signup">
-                <Button variant="outline" size="sm" className="text-xs border-[#22304e] hover:border-indigo-600/60">
-                  Get Started
-                </Button>
-              </Link>
-            </div>
-          ) : null}
+            ) : (
+              <div className="flex items-center gap-2">
+                <Link href="/login">
+                  <Button variant="ghost" size="sm" className="text-slate-300 hover:text-white text-xs">
+                    <LogIn className="h-3.5 w-3.5 mr-1 text-slate-400" />
+                    Sign In
+                  </Button>
+                </Link>
+                <Link href="/signup">
+                  <Button variant="outline" size="sm" className="text-xs border-[#22304e] hover:border-indigo-600/60">
+                    Get Started
+                  </Button>
+                </Link>
+              </div>
+            )
+          ) : (
+            <div className="w-[140px] h-8" />
+          )}
 
           <Link href="/setup">
             <Button size="sm" className="gap-2 shadow-sm bg-indigo-600 hover:bg-indigo-500">
@@ -151,41 +157,43 @@ export function Navbar() {
           </div>
 
           <div className="pt-2 border-t border-[#1e2d4f] flex flex-col gap-2">
-            {!isLoading && user ? (
-              <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-[#141e34] border border-[#1e2d4f]">
-                <div className="text-xs">
-                  <div className="flex items-center gap-1.5">
-                    <p className="font-semibold text-white">{user.name}</p>
-                    {user.role === "recruiter" && (
-                      <Badge variant="indigo" className="text-[9px] py-0 px-1">Recruiter</Badge>
-                    )}
+            {isMounted && !isLoading && (
+              user ? (
+                <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-[#141e34] border border-[#1e2d4f]">
+                  <div className="text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-semibold text-white">{user.name}</p>
+                      {user.role === "recruiter" && (
+                        <Badge variant="indigo" className="text-[9px] py-0 px-1">Recruiter</Badge>
+                      )}
+                    </div>
+                    <p className="text-slate-400 text-[11px] truncate">{user.email}</p>
                   </div>
-                  <p className="text-slate-400 text-[11px] truncate">{user.email}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleLogout}
+                    className="text-xs text-rose-300 border-rose-900/50 hover:bg-rose-950/40 gap-1"
+                  >
+                    <LogOut className="h-3 w-3 text-rose-400" />
+                    Log Out
+                  </Button>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleLogout}
-                  className="text-xs text-rose-300 border-rose-900/50 hover:bg-rose-950/40 gap-1"
-                >
-                  <LogOut className="h-3 w-3 text-rose-400" />
-                  Log Out
-                </Button>
-              </div>
-            ) : !isLoading ? (
-              <div className="grid grid-cols-2 gap-2">
-                <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
-                  <Button variant="outline" className="w-full text-xs justify-center">
-                    Sign In
-                  </Button>
-                </Link>
-                <Link href="/signup" onClick={() => setMobileMenuOpen(false)}>
-                  <Button variant="secondary" className="w-full text-xs justify-center">
-                    Get Started
-                  </Button>
-                </Link>
-              </div>
-            ) : null}
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
+                    <Button variant="outline" className="w-full text-xs justify-center">
+                      Sign In
+                    </Button>
+                  </Link>
+                  <Link href="/signup" onClick={() => setMobileMenuOpen(false)}>
+                    <Button variant="secondary" className="w-full text-xs justify-center">
+                      Get Started
+                    </Button>
+                  </Link>
+                </div>
+              )
+            )}
 
             <Link href="/setup" onClick={() => setMobileMenuOpen(false)}>
               <Button className="w-full gap-2 justify-center bg-indigo-600 hover:bg-indigo-500">

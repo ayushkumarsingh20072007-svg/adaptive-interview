@@ -32,3 +32,10 @@ backend/.env.*.local
 *.tsbuildinfo
 next-env.d.ts
 /data/
+frontend/data/
+
+# SQLite Database files
+*.db
+*.db-journal
+*.db-wal
+dev.db

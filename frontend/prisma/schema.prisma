@@ -1,0 +1,125 @@
+// Prisma Schema for InterviewIQ (Local SQLite)
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 1. User Account & Authentication Credentials
+model User {
+  id           String             @id @default(cuid())
+  email        String             @unique
+  name         String
+  role         String             // "candidate" | "recruiter"
+  companyName  String?
+  title        String?
+  passwordHash String
+  passwordSalt String
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  sessions     AuthSession[]
+  interviews   InterviewSession[]
+  reviews      RecruiterReview[]  @relation("UserReviews")
+}
+
+// 2. Active Authentication Sessions & Bearer Tokens
+model AuthSession {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// 3. Candidate Interview Sessions (Calibration, Setup & Workflow)
+model InterviewSession {
+  id              String             @id // Preserves existing "session-xxx" and "demo-session-xxx" IDs
+  userId          String?
+  user            User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  candidateName   String
+  targetRole      String             // e.g. "fullstack", "frontend", "backend"
+  experienceLevel String             // e.g. "beginner", "intermediate", "advanced"
+  interviewFocus  String             // e.g. "dsa", "core-concepts", "projects", "mixed"
+  interviewLength Int                @default(20) // in minutes
+  skills          String             // Serialized JSON string: string[]
+  resumeFileName  String?
+  isSampleResume  Boolean            @default(false)
+  status          String             @default("in-progress") // "in-progress" | "completed"
+  durationSeconds Int                @default(0)
+  startedAt       DateTime           @default(now())
+  endedAt         DateTime?
+  createdAt       DateTime           @default(now())
+
+  answers         InterviewAnswer[]
+  report          EvaluationReport?
+  review          RecruiterReview?
+
+  @@index([userId])
+}
+
+// 4. Candidate Answer Turns & AI Evaluation Feedback
+model InterviewAnswer {
+  id           String           @id @default(cuid())
+  sessionId    String
+  session      InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  questionId   String
+  questionText String
+  category     String
+  difficulty   String
+  answerText   String
+  score        Int              @default(0) // 0 - 100
+  strengths    String           // Serialized JSON string: string[]
+  gaps         String           // Serialized JSON string: string[]
+  adaptiveNote String?
+  submittedAt  String           // Timestamp string (e.g. "09:30 AM" or ISO string)
+  createdAt    DateTime         @default(now())
+
+  @@index([sessionId])
+}
+
+// 5. Synthesized Candidate Evaluation Reports
+model EvaluationReport {
+  id                 String           @id @default(cuid())
+  sessionId          String           @unique
+  session            InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  candidateName      String
+  targetRole         String
+  experienceLevel    String
+  interviewFocus     String
+  completedAt        String
+  durationMinutes    Int
+  overallScore       Int              // 0 - 100
+  verdict            String           // e.g. "Strong Hire Recommendation"
+  metrics            String           // Serialized JSON string: SkillMetric[]
+  strengths          String           // Serialized JSON string: string[]
+  areasToImprove     String           // Serialized JSON string: string[]
+  actionableRoadmap  String           // Serialized JSON string: string[]
+  evidenceCitations  String?          // Serialized JSON string: EvidenceCitation[]
+  recruiterFollowUps String?          // Serialized JSON string: RecruiterFollowUp[]
+  skillStatusCounts  String?          // Serialized JSON string: { demonstrated, claimedUnvalidated, notAssessed }
+  isDemoSimulation   Boolean          @default(false)
+  createdAt          DateTime         @default(now())
+}
+
+// 6. Recruiter Pipeline Shortlist Status & Evaluation Notes
+model RecruiterReview {
+  id            String           @id @default(cuid())
+  sessionId     String           @unique
+  session       InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  candidateName String
+  status        String           @default("pending") // "pending" | "shortlisted" | "under-review" | "rejected"
+  notes         String?
+  reviewerId    String?
+  reviewer      User?            @relation("UserReviews", fields: [reviewerId], references: [id], onDelete: SetNull)
+  reviewedBy    String?          // Display string fallback: "Sarah Jenkins (Head of Talent)"
+  updatedAt     DateTime         @updatedAt
+  createdAt     DateTime         @default(now())
+}

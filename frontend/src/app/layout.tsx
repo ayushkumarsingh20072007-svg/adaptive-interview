@@ -31,9 +31,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
     >
-      <body className="min-h-full flex flex-col bg-[#070c18] bg-grid-pattern text-slate-100 font-sans selection:bg-indigo-500/30 selection:text-indigo-200 relative overflow-x-hidden">
+      <body
+        suppressHydrationWarning
+        className="min-h-full flex flex-col bg-[#070c18] bg-grid-pattern text-slate-100 font-sans selection:bg-indigo-500/30 selection:text-indigo-200 relative overflow-x-hidden"
+      >
         {/* Ambient top illumination */}
         <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[1100px] h-[450px] bg-radial-glow pointer-events-none -z-10 blur-3xl" />
         <AuthProvider>

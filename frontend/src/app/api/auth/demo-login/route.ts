@@ -8,12 +8,12 @@ export async function POST(request: Request) {
 
     let user = null;
     if (demoId) {
-      user = findUserById(demoId) || DEMO_USERS.find((u) => u.id === demoId);
+      user = (await findUserById(demoId)) || DEMO_USERS.find((u) => u.id === demoId);
     } else if (email) {
-      user = findUserByEmail(email) || DEMO_USERS.find((u) => u.email.toLowerCase() === email.toLowerCase());
+      user = (await findUserByEmail(email)) || DEMO_USERS.find((u) => u.email.toLowerCase() === email.toLowerCase());
     } else {
       // Default to recruiter for quick demo
-      user = findUserById("usr_demo_recruiter") || DEMO_USERS[0];
+      user = (await findUserById("usr_demo_recruiter")) || DEMO_USERS[0];
     }
 
     if (!user) {

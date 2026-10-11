@@ -174,18 +174,72 @@ export function generateEvaluationReport(session: InterviewSession): EvaluationR
     categoryMap.set("Problem Solving", { sum: 82, count: 1 });
   }
 
-  const metrics: SkillMetric[] = Array.from(categoryMap.entries()).map(([cat, data]) => {
+  const metrics: SkillMetric[] = Array.from(categoryMap.entries()).map(([cat, data], idx) => {
     const catScore = Math.round(data.sum / data.count);
     let level: SkillMetric["level"] = "Proficient";
     if (catScore >= 90) level = "Mastery";
     else if (catScore < 75) level = "Needs Focus";
     else if (catScore < 82) level = "Developing";
 
+    const relevantAnswer = answers.find((a) => a.category === cat);
+    let quote = "";
+    if (relevantAnswer && relevantAnswer.answerText.trim().length > 20) {
+      // Extract verbatim clause from the candidate's real answer
+      const sentences = relevantAnswer.answerText.split(/[.?!]/).map((s) => s.trim()).filter((s) => s.length >= 15);
+      quote = sentences.length > 0 ? sentences[0].slice(0, 120) : relevantAnswer.answerText.slice(0, 100);
+    }
+
+    const status: SkillMetric["status"] =
+      catScore >= 75 && quote
+        ? "demonstrated"
+        : catScore < 65 || !quote
+        ? "claimed_unvalidated"
+        : "demonstrated";
+
     return {
       category: cat,
       score: catScore,
       level,
       totalEvaluated: data.count,
+      status,
+      confidence: quote ? (catScore >= 80 ? "high" : "medium") : "low",
+      explanation: quote
+        ? `Validated against candidate's concrete response with ${catScore}% benchmark scoring.`
+        : "Candidate response lacked sufficient technical depth to fully validate claimed competency.",
+      rubricCriteria: ["Technical Precision", "Architectural Trade-offs", "Edge Case Handling"],
+      evidenceQuote: quote,
+      questionReference: `Q${idx + 1}`,
+    };
+  });
+
+  // Extract evidence citations directly from actual candidate answers
+  const evidenceCitations: EvaluationReport["evidenceCitations"] = answers.map((ans, idx) => {
+    let quote = "";
+    let confidence: "high" | "medium" | "low" = "medium";
+    let status: "demonstrated" | "claimed_unvalidated" | "not_assessed" = "demonstrated";
+
+    if (ans.answerText.trim().length >= 25) {
+      // Direct verbatim extract from candidate's answer
+      const clauses = ans.answerText.split(/[,.;]/).map((c) => c.trim()).filter((c) => c.length >= 20);
+      quote = clauses.length > 0 ? clauses[0] : ans.answerText.slice(0, 100);
+      confidence = ans.feedback.score >= 80 ? "high" : "medium";
+      status = ans.feedback.score >= 70 ? "demonstrated" : "claimed_unvalidated";
+    } else {
+      quote = "";
+      confidence = "low";
+      status = "claimed_unvalidated";
+    }
+
+    return {
+      quote,
+      context: quote
+        ? `Candidate demonstrated ${ans.category} concepts with feedback score ${ans.feedback.score}/100.`
+        : "Candidate answer was too brief or incomplete to extract supporting quote evidence.",
+      competency: ans.category,
+      questionIndex: idx + 1,
+      questionText: ans.questionText,
+      confidence,
+      status,
     };
   });
 
@@ -213,6 +267,45 @@ export function generateEvaluationReport(session: InterviewSession): EvaluationR
     areasToImprove.push("Practice time-bounded optimization trade-offs under constraints.");
   }
 
+  // Generate recruiter follow-ups for round 2
+  const recruiterFollowUps: EvaluationReport["recruiterFollowUps"] = [];
+  if (answers.length > 0) {
+    const lowestAnswer = [...answers].sort((a, b) => a.feedback.score - b.feedback.score)[0];
+    recruiterFollowUps.push({
+      id: `rf-det-1`,
+      question: `Could you walk through a concrete production failure you resolved related to ${lowestAnswer.category}, including how you diagnosed it under monitoring?`,
+      targetSkill: lowestAnswer.category,
+      rationale: `Candidate scored ${lowestAnswer.feedback.score}% on ${lowestAnswer.category}. Probing real-world operational debugging will verify practical depth.`,
+      verificationContext: `Candidate's response in Q${answers.indexOf(lowestAnswer) + 1} showed conceptual gaps: ${lowestAnswer.feedback.gaps[0] || "surface-level answer"}.`,
+      uncertaintyLevel: "medium",
+    });
+
+    const highestAnswer = [...answers].sort((a, b) => b.feedback.score - a.feedback.score)[0];
+    recruiterFollowUps.push({
+      id: `rf-det-2`,
+      question: `In your design for ${highestAnswer.category}, how would your architecture handle a 10x traffic spike or network split between availability zones?`,
+      targetSkill: highestAnswer.category,
+      rationale: `Candidate showed proficiency in ${highestAnswer.category}. Probe scalability limits and edge-case boundaries.`,
+      verificationContext: `Demonstrated strength in Q${answers.indexOf(highestAnswer) + 1}.`,
+      uncertaintyLevel: "low",
+    });
+  } else {
+    recruiterFollowUps.push({
+      id: `rf-det-default`,
+      question: `Can you walk through your end-to-end architectural workflow for a high-availability microservice?`,
+      targetSkill: "System Architecture",
+      rationale: `No live answer turns recorded to validate architectural fluency.`,
+      uncertaintyLevel: "high",
+    });
+  }
+
+  // Skill status counts
+  const skillStatusCounts = {
+    demonstrated: metrics.filter((m) => m.status === "demonstrated").length,
+    claimedUnvalidated: metrics.filter((m) => m.status === "claimed_unvalidated").length,
+    notAssessed: metrics.filter((m) => m.status === "not_assessed").length,
+  };
+
   // Actionable roadmap
   const actionableRoadmap = [
     `Deepen conceptual drill-down on ${metrics[0]?.category || "System Design"} patterns and edge cases.`,
@@ -228,12 +321,12 @@ export function generateEvaluationReport(session: InterviewSession): EvaluationR
 
   const report: EvaluationReport = {
     sessionId: session.id,
-    candidateName: session.setup.candidateName || "Anonymous Candidate",
-    targetRole: ROLE_LABELS[session.setup.targetRole] || "Software Engineer",
+    candidateName: session.setup?.candidateName || "Anonymous Candidate",
+    targetRole: ROLE_LABELS[session.setup?.targetRole || "fullstack"] || "Software Engineer",
     experienceLevel:
-      session.setup.experienceLevel.charAt(0).toUpperCase() +
-      session.setup.experienceLevel.slice(1),
-    interviewFocus: session.setup.interviewFocus.replace("-", " ").toUpperCase(),
+      (session.setup?.experienceLevel || "intermediate").charAt(0).toUpperCase() +
+      (session.setup?.experienceLevel || "intermediate").slice(1),
+    interviewFocus: (session.setup?.interviewFocus || "mixed").replace("-", " ").toUpperCase(),
     completedAt: new Date().toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
@@ -249,6 +342,9 @@ export function generateEvaluationReport(session: InterviewSession): EvaluationR
     answerRecords: answers,
     isDemoSimulation: true,
     userId: session.setup.userId || session.userId,
+    evidenceCitations,
+    recruiterFollowUps,
+    skillStatusCounts,
   };
 
   saveStoredReport(report);

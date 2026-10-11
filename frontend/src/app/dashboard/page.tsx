@@ -33,15 +33,32 @@ import {
   Filter,
   ChevronRight,
   LogOut,
+  Search,
+  Edit3,
+  Save,
+  Briefcase,
+  Download,
+  FileSpreadsheet,
+  ChevronDown,
+  ChevronUp,
+  Quote,
+  AlertTriangle,
+  FileQuestion,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { EmptyState } from "@/components/ui/status-states";
-import { CandidateSetup, EvaluationReport, TargetRole } from "@/lib/types";
+import {
+  CandidateSetup,
+  EvaluationReport,
+  TargetRole,
+  ShortlistStatus,
+  SkillStatusCategory,
+} from "@/lib/types";
 import { ROLE_LABELS, ROLE_SKILLS, SAMPLE_CANDIDATE } from "@/lib/mock-data";
-import { getStoredSetup, getAllReports } from "@/lib/storage";
+import { getStoredSetup, getAllReports, updateCandidateShortlist } from "@/lib/storage";
 import { initializeInterviewSession } from "@/lib/interview-engine";
 import { useIsMounted } from "@/lib/use-mounted";
 import { useAuth } from "@/lib/auth-context";
@@ -51,6 +68,7 @@ interface CompetencyStat {
   avgScore: number;
   level: "Needs Focus" | "Developing" | "Proficient" | "Mastery";
   count: number;
+  status: SkillStatusCategory;
 }
 
 export default function DashboardPage() {
@@ -58,41 +76,222 @@ export default function DashboardPage() {
   const { user, logout } = useAuth();
   const userRole = (user as { role?: string } | null)?.role;
   const isRecruiter = userRole === "recruiter";
-  const [activeTab, setActiveTab] = React.useState<"overview" | "history" | "skills" | "settings" | "pipeline">(
+  const [activeTab, setActiveTab] = React.useState<"overview" | "history" | "skills" | "settings" | "pipeline" | "analytics">(
     isRecruiter ? "pipeline" : "overview"
   );
 
   const isMounted = useIsMounted();
+  const [refreshKey, setRefreshKey] = React.useState(0);
 
   const setup: CandidateSetup = React.useMemo(() => {
     if (!isMounted) return SAMPLE_CANDIDATE;
     return getStoredSetup(user?.id) || SAMPLE_CANDIDATE;
   }, [isMounted, user?.id]);
 
-  const reports: EvaluationReport[] = React.useMemo(() => {
-    if (!isMounted) return [];
+  const [reports, setReports] = React.useState<EvaluationReport[]>(() => {
     return getAllReports(user?.id, userRole as "candidate" | "recruiter" | undefined);
-  }, [isMounted, user?.id, userRole]);
+  });
+
+  React.useEffect(() => {
+    if (!isMounted) return;
+    const initial = getAllReports(user?.id, userRole as "candidate" | "recruiter" | undefined);
+    setReports(initial);
+
+    let cancelled = false;
+    fetch("/api/interview/reports")
+      .then(async (res) => {
+        if (res.ok) {
+          const data = await res.json();
+          if (data.reports && !cancelled) {
+            const mergedMap = new Map<string, EvaluationReport>();
+            initial.forEach((r) => mergedMap.set(r.sessionId, r));
+            data.reports.forEach((r: EvaluationReport) => mergedMap.set(r.sessionId, r));
+            setReports(Array.from(mergedMap.values()).sort((a, b) => (a.completedAt < b.completedAt ? 1 : -1)));
+          }
+        }
+      })
+      .catch((err) => console.warn("Failed to load server reports:", err));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isMounted, user?.id, userRole, refreshKey]);
 
   const [isStarting, setIsStarting] = React.useState(false);
 
+  // Switch to pipeline tab if recruiter logs in
+  React.useEffect(() => {
+    if (isRecruiter) {
+      setActiveTab("pipeline");
+    }
+  }, [isRecruiter]);
+
   // --- PIPELINE STATE (Recruiter) ---
   const [pipelineFilter, setPipelineFilter] = React.useState<"all" | "pending" | "shortlisted" | "under-review" | "rejected">("all");
-  const [pipelineShortlists, setPipelineShortlists] = React.useState<Record<string, string>>({});
+  const [pipelineRoleFilter, setPipelineRoleFilter] = React.useState<string>("all");
+  const [pipelineScoreFilter, setPipelineScoreFilter] = React.useState<"all" | "top" | "solid" | "needs-work">("all");
+  const [pipelineSearch, setPipelineSearch] = React.useState<string>("");
+  const [pipelineShortlists, setPipelineShortlists] = React.useState<Record<string, ShortlistStatus>>({});
+  const [pipelineNotes, setPipelineNotes] = React.useState<Record<string, string>>({});
+  const [editingNoteSessionId, setEditingNoteSessionId] = React.useState<string | null>(null);
+  const [editingNoteDraft, setEditingNoteDraft] = React.useState<string>("");
+  const [expandedTranscriptSessionId, setExpandedTranscriptSessionId] = React.useState<string | null>(null);
 
-  function handlePipelineStatusChange(sessionId: string, candidateName: string, status: string) {
+  // Load persisted recruiter reviews from SQLite server API
+  React.useEffect(() => {
+    if (!isRecruiter) return;
+    let cancelled = false;
+    fetch("/api/interview/reviews")
+      .then(async (res) => {
+        if (res.ok) {
+          const data = await res.json();
+          if (data.reviews && !cancelled) {
+            const statusMap: Record<string, ShortlistStatus> = {};
+            const notesMap: Record<string, string> = {};
+            data.reviews.forEach((r: any) => {
+              if (r.status) statusMap[r.sessionId] = r.status;
+              if (r.notes) notesMap[r.sessionId] = r.notes;
+            });
+            setPipelineShortlists((prev) => ({ ...prev, ...statusMap }));
+            setPipelineNotes((prev) => ({ ...prev, ...notesMap }));
+          }
+        }
+      })
+      .catch((err) => console.warn("Failed to fetch recruiter reviews:", err));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isRecruiter, refreshKey]);
+
+  function handlePipelineStatusChange(sessionId: string, candidateName: string, status: ShortlistStatus) {
     setPipelineShortlists((prev) => ({ ...prev, [sessionId]: status }));
-    // Persist via storage
-    import("@/lib/storage").then(({ updateCandidateShortlist }) => {
-      updateCandidateShortlist(
+    const currentNote = pipelineNotes[sessionId];
+    updateCandidateShortlist(
+      sessionId,
+      candidateName,
+      status,
+      currentNote,
+      user?.name || "Sarah Jenkins (Company Head)"
+    );
+
+    // Persist to SQLite via server API
+    fetch("/api/interview/review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         sessionId,
         candidateName,
-        status as import("@/lib/types").ShortlistStatus,
-        undefined,
-        user?.name
-      );
-    });
+        status,
+        notes: currentNote || undefined,
+      }),
+    }).catch((err) => console.warn("Failed to persist recruiter review:", err));
   }
+
+  function handleSaveCandidateNote(sessionId: string, candidateName: string, effectiveStatus: ShortlistStatus) {
+    const savedDraft = editingNoteDraft;
+    setPipelineNotes((prev) => ({ ...prev, [sessionId]: savedDraft }));
+    updateCandidateShortlist(
+      sessionId,
+      candidateName,
+      effectiveStatus,
+      savedDraft,
+      user?.name || "Sarah Jenkins (Company Head)"
+    );
+
+    // Persist to SQLite via server API
+    fetch("/api/interview/review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId,
+        candidateName,
+        status: effectiveStatus,
+        notes: savedDraft,
+      }),
+    }).catch((err) => console.warn("Failed to persist candidate note:", err));
+
+    setEditingNoteSessionId(null);
+  }
+
+  function handleExportPipelineCSV() {
+    if (reports.length === 0) return;
+    const headers = [
+      "Candidate Name",
+      "Target Role",
+      "Experience Level",
+      "Overall Score (%)",
+      "AI Verdict",
+      "Shortlist Status",
+      "Reviewed By",
+      "Hiring Committee Notes",
+      "Completed At",
+      "Duration (Mins)",
+      "Questions Evaluated"
+    ];
+    const rows = reports.map((r) => {
+      const effectiveStatus = pipelineShortlists[r.sessionId] ?? r.shortlistStatus ?? "pending";
+      const currentNote = pipelineNotes[r.sessionId] ?? r.shortlistNotes ?? "";
+      return [
+        `"${(r.candidateName || "Candidate").replace(/"/g, '""')}"`,
+        `"${(r.targetRole || "Software Engineer").replace(/"/g, '""')}"`,
+        `"${r.experienceLevel || "intermediate"}"`,
+        r.overallScore || 0,
+        `"${(r.verdict || "Under Review").replace(/"/g, '""')}"`,
+        `"${effectiveStatus}"`,
+        `"${(user?.name || "Sarah Jenkins (Head of Talent)").replace(/"/g, '""')}"`,
+        `"${currentNote.replace(/"/g, '""')}"`,
+        `"${r.completedAt || ""}"`,
+        r.durationMinutes || 0,
+        r.answerRecords?.length || 0,
+      ].join(",");
+    });
+
+    const csvString = [headers.join(","), ...rows].join("\r\n");
+    const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `TechCorp_Talent_Pipeline_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  // --- RECRUITER AGGREGATE STATS ---
+  const recruiterStats = React.useMemo(() => {
+    const total = reports.length;
+    const shortlisted = reports.filter((r) => (pipelineShortlists[r.sessionId] ?? r.shortlistStatus ?? "pending") === "shortlisted").length;
+    const underReview = reports.filter((r) => (pipelineShortlists[r.sessionId] ?? r.shortlistStatus ?? "pending") === "under-review").length;
+    const rejected = reports.filter((r) => (pipelineShortlists[r.sessionId] ?? r.shortlistStatus ?? "pending") === "rejected").length;
+    const pending = reports.filter((r) => (pipelineShortlists[r.sessionId] ?? r.shortlistStatus ?? "pending") === "pending").length;
+    const avgScore = total > 0 ? Math.round(reports.reduce((acc, r) => acc + (r.overallScore || 0), 0) / total) : 0;
+    const shortlistRate = total > 0 ? Math.round((shortlisted / total) * 100) : 0;
+
+    const roleMap = new Map<string, { count: number; totalScore: number }>();
+    reports.forEach((r) => {
+      const entry = roleMap.get(r.targetRole) || { count: 0, totalScore: 0 };
+      roleMap.set(r.targetRole, { count: entry.count + 1, totalScore: entry.totalScore + (r.overallScore || 0) });
+    });
+
+    const roleBreakdown = Array.from(roleMap.entries()).map(([role, data]) => ({
+      role,
+      count: data.count,
+      avgScore: Math.round(data.totalScore / data.count),
+    }));
+
+    return {
+      total,
+      shortlisted,
+      underReview,
+      rejected,
+      pending,
+      avgScore,
+      shortlistRate,
+      roleBreakdown,
+    };
+  }, [reports, pipelineShortlists]);
 
   function handleStartNewInterview(customRole?: TargetRole) {
     setIsStarting(true);
@@ -124,6 +323,7 @@ export default function DashboardPage() {
         competencies: [] as CompetencyStat[],
         scoreTrend: null as { delta: number; isUp: boolean; previous: number; latest: number } | null,
         allRecommendations: [] as string[],
+        statusCounts: { demonstrated: 0, claimedUnvalidated: 0, notAssessed: 0 },
       };
     }
 
@@ -134,14 +334,15 @@ export default function DashboardPage() {
     const averageScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
 
     // Aggregate unique competencies across all completed reports
-    const catMap = new Map<string, { total: number; count: number }>();
+    const catMap = new Map<string, { total: number; count: number; status?: SkillStatusCategory }>();
     for (const rep of reports) {
       for (const m of rep.metrics || []) {
         if (!m.category) continue;
-        const current = catMap.get(m.category) || { total: 0, count: 0 };
+        const current = catMap.get(m.category) || { total: 0, count: 0, status: m.status };
         catMap.set(m.category, {
           total: current.total + m.score,
           count: current.count + 1,
+          status: m.status || current.status,
         });
       }
     }
@@ -154,17 +355,32 @@ export default function DashboardPage() {
         else if (avg < 75) level = "Needs Focus";
         else if (avg < 82) level = "Developing";
 
+        const status: SkillStatusCategory =
+          data.status ||
+          (data.count === 0
+            ? "not_assessed"
+            : avg >= 75 && data.count >= 1
+            ? "demonstrated"
+            : "claimed_unvalidated");
+
         return {
           category,
           avgScore: avg,
           level,
           count: data.count,
+          status,
         };
       })
       .sort((a, b) => b.avgScore - a.avgScore);
 
     const strongest = competencies.length > 0 ? competencies[0] : null;
     const priority = competencies.length > 0 ? competencies[competencies.length - 1] : null;
+
+    const statusCounts = {
+      demonstrated: competencies.filter((c) => c.status === "demonstrated").length,
+      claimedUnvalidated: competencies.filter((c) => c.status === "claimed_unvalidated").length,
+      notAssessed: competencies.filter((c) => c.status === "not_assessed").length,
+    };
 
     // Score trend: only calculate when multiple comparable historical evaluations exist
     let scoreTrend = null;
@@ -200,6 +416,7 @@ export default function DashboardPage() {
       competencies,
       scoreTrend,
       allRecommendations,
+      statusCounts,
     };
   }, [reports]);
 
@@ -210,24 +427,24 @@ export default function DashboardPage() {
   return (
     <div className="flex flex-col gap-8 max-w-6xl mx-auto w-full py-2">
       {/* 1. ULTRA-PREMIUM COMMAND CENTER HEADER */}
-      <div className="relative rounded-3xl border border-indigo-500/20 bg-gradient-to-r from-[#0d152a]/95 via-[#0b1021]/95 to-[#070b16]/95 backdrop-blur-2xl p-6 sm:p-8 shadow-2xl shadow-indigo-950/40 overflow-hidden">
+      <div className={`relative rounded-3xl border ${isRecruiter ? "border-violet-500/30 bg-gradient-to-r from-[#120f29]/95 via-[#0c0d24]/95 to-[#070814]/95 shadow-violet-950/40" : "border-indigo-500/20 bg-gradient-to-r from-[#0d152a]/95 via-[#0b1021]/95 to-[#070b16]/95 shadow-indigo-950/40"} backdrop-blur-2xl p-6 sm:p-8 shadow-2xl overflow-hidden`}>
         {/* Ambient Top Glow Line */}
-        <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-indigo-500/60 to-transparent" />
-        <div className="absolute top-0 right-1/4 w-80 h-32 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className={`absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent ${isRecruiter ? "via-violet-500/60" : "via-indigo-500/60"} to-transparent`} />
+        <div className={`absolute top-0 right-1/4 w-80 h-32 ${isRecruiter ? "bg-violet-500/10" : "bg-indigo-500/10"} rounded-full blur-3xl pointer-events-none`} />
 
         <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide bg-indigo-950/80 text-indigo-300 border border-indigo-700/40 shadow-inner">
-                <Sparkles className="h-3.5 w-3.5 text-indigo-400 animate-pulse" />
-                Adaptive AI Intelligence Engine
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide ${isRecruiter ? "bg-violet-950/80 text-violet-300 border-violet-700/40" : "bg-indigo-950/80 text-indigo-300 border-indigo-700/40"} border shadow-inner`}>
+                <Sparkles className={`h-3.5 w-3.5 ${isRecruiter ? "text-violet-400" : "text-indigo-400"} animate-pulse`} />
+                {isRecruiter ? "Company Head · TechCorp Global" : "Adaptive AI Intelligence Engine"}
               </span>
 
               {user ? (
                 <div className="flex items-center gap-2">
                   <Badge variant="success" className="text-[11px]">
                     <CheckCircle2 className="h-3 w-3 mr-1" />
-                    Verified: {user.email}
+                    {isRecruiter ? `Hiring Lead: ${user.name}` : `Verified: ${user.email}`}
                   </Badge>
                   <Button
                     variant="ghost"
@@ -253,211 +470,296 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              <span className="text-xs text-slate-400 font-mono flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
-                Track: {roleName}
-              </span>
+              {isRecruiter ? (
+                <span className="text-xs text-violet-300 font-mono flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-ping" />
+                  Role: Company Head & Talent Committee
+                </span>
+              ) : (
+                <span className="text-xs text-slate-400 font-mono flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
+                  Track: {roleName}
+                </span>
+              )}
             </div>
 
             <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-              Welcome back, <span className="text-gradient-primary">{displayName}</span>
+              {isRecruiter ? (
+                <>
+                  Talent Pipeline & <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-indigo-400 bg-clip-text text-transparent">Shortlist Authority</span>
+                </>
+              ) : (
+                <>
+                  Welcome back, <span className="text-gradient-primary">{displayName}</span>
+                </>
+              )}
             </h1>
 
             <p className="text-sm text-slate-300 max-w-2xl leading-relaxed">
-              Real-time technical interview analytics command center. Calibrate your profile, execute adaptive AI sessions, and inspect evidence-backed scorecards with quote citations.
+              {isRecruiter
+                ? "Unified leadership portal. Access every candidate's technical interview records, inspect verbatim question & answer transcripts, and execute hiring decisions with persistent notes."
+                : "Real-time technical interview analytics command center. Calibrate your profile, execute adaptive AI sessions, and inspect evidence-backed scorecards with quote citations."}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            {user && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleLogout}
-                className="gap-1.5 text-xs h-10 px-3.5 border-rose-900/50 text-rose-300 hover:bg-rose-950/40 hover:text-white"
-                title="Log out of account"
-              >
-                <LogOut className="h-3.5 w-3.5 text-rose-400" />
-                <span className="hidden sm:inline">Log Out</span>
-              </Button>
-            )}
-
-            <Link href="/setup">
-              <Button variant="secondary" size="sm" className="gap-2 text-xs h-10 px-4">
-                <Settings className="h-3.5 w-3.5 text-slate-400" />
-                Recalibrate Track
-              </Button>
-            </Link>
-
-            {reports.length > 0 && (
-              <Link href={`/report/${reports[0].sessionId}`}>
-                <Button variant="outline" size="sm" className="gap-2 text-xs h-10 px-4 border-indigo-900/40 hover:border-indigo-500/50">
-                  <FileText className="h-3.5 w-3.5 text-indigo-400" />
-                  Latest Audit
+            {isRecruiter ? (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportPipelineCSV}
+                  className="gap-2 text-xs h-10 px-4 border-violet-800/60 text-violet-300 hover:bg-violet-950/50 hover:text-white"
+                  title="Export candidate pipeline as CSV"
+                >
+                  <Download className="h-3.5 w-3.5 text-violet-400" />
+                  Export Pipeline (CSV)
                 </Button>
-              </Link>
-            )}
 
-            <Button
-              size="md"
-              onClick={() => handleStartNewInterview()}
-              isLoading={isStarting}
-              className="gap-2 font-bold shadow-xl shadow-indigo-600/25 h-10 px-5"
-            >
-              <Play className="h-4 w-4 fill-current" />
-              Launch Live Interview
-            </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setRefreshKey((k) => k + 1)}
+                  className="gap-2 text-xs h-10 px-3.5 border-slate-700/60"
+                  title="Reload all stored candidate records"
+                >
+                  <RefreshCw className="h-3.5 w-3.5 text-slate-300" />
+                  Refresh
+                </Button>
+
+                {reports.length > 0 && (
+                  <Link href={`/report/${reports[0].sessionId}`}>
+                    <Button variant="outline" size="sm" className="gap-2 text-xs h-10 px-4 border-indigo-900/40 hover:border-indigo-500/50">
+                      <FileText className="h-3.5 w-3.5 text-indigo-400" />
+                      Latest Audit
+                    </Button>
+                  </Link>
+                )}
+              </>
+            ) : (
+              <>
+                {user && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleLogout}
+                    className="gap-1.5 text-xs h-10 px-3.5 border-rose-900/50 text-rose-300 hover:bg-rose-950/40 hover:text-white"
+                    title="Log out of account"
+                  >
+                    <LogOut className="h-3.5 w-3.5 text-rose-400" />
+                    <span className="hidden sm:inline">Log Out</span>
+                  </Button>
+                )}
+
+                <Link href="/setup">
+                  <Button variant="secondary" size="sm" className="gap-2 text-xs h-10 px-4">
+                    <Settings className="h-3.5 w-3.5 text-slate-400" />
+                    Recalibrate Track
+                  </Button>
+                </Link>
+
+                {reports.length > 0 && (
+                  <Link href={`/report/${reports[0].sessionId}`}>
+                    <Button variant="outline" size="sm" className="gap-2 text-xs h-10 px-4 border-indigo-900/40 hover:border-indigo-500/50">
+                      <FileText className="h-3.5 w-3.5 text-indigo-400" />
+                      Latest Audit
+                    </Button>
+                  </Link>
+                )}
+
+                <Button
+                  size="md"
+                  onClick={() => handleStartNewInterview()}
+                  isLoading={isStarting}
+                  className="gap-2 font-bold shadow-xl shadow-indigo-600/25 h-10 px-5"
+                >
+                  <Play className="h-4 w-4 fill-current" />
+                  Launch Live Interview
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>
 
       {/* 2. TOP 4 ANALYTICS COMMAND CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Completed Audits */}
-        <Card className="p-5 relative overflow-hidden group hover:border-indigo-500/40 transition-all duration-300 hover:-translate-y-1">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-indigo-500/10 transition-colors" />
-          <div className="flex items-center justify-between text-xs text-slate-400">
-            <span className="font-semibold uppercase tracking-wider text-[10px]">Completed Audits</span>
-            <div className="h-8 w-8 rounded-xl bg-indigo-950/80 border border-indigo-800/40 flex items-center justify-center text-indigo-400">
-              <FileText className="h-4 w-4" />
-            </div>
-          </div>
-          <p className="text-3xl font-extrabold text-white mt-3 font-mono tracking-tight">
-            {analytics.completedCount}
-          </p>
-          <div className="text-[11px] text-slate-400 mt-2 flex items-center gap-1.5">
-            {analytics.completedCount > 0 ? (
-              <>
+        {isRecruiter ? (
+          <>
+            {/* Recruiter Card 1: Candidate Pool */}
+            <Card className="p-5 relative overflow-hidden group hover:border-violet-500/40 transition-all duration-300 hover:-translate-y-1">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-violet-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-violet-500/10 transition-colors" />
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span className="font-semibold uppercase tracking-wider text-[10px]">Candidate Pool</span>
+                <div className="h-8 w-8 rounded-xl bg-violet-950/80 border border-violet-800/40 flex items-center justify-center text-violet-400">
+                  <Users className="h-4 w-4" />
+                </div>
+              </div>
+              <p className="text-3xl font-extrabold text-white mt-3 font-mono tracking-tight">
+                {recruiterStats.total}
+              </p>
+              <div className="text-[11px] text-slate-400 mt-2 flex items-center gap-1.5">
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                <span className="text-emerald-400 font-medium">Verified evaluation records</span>
-              </>
-            ) : (
-              <span className="text-slate-500 font-mono">0 sessions logged yet</span>
-            )}
-          </div>
-        </Card>
+                <span className="text-emerald-400 font-medium">100% verified AI interviews</span>
+              </div>
+            </Card>
 
-        {/* Card 2: Composite Score */}
-        <Card className="p-5 relative overflow-hidden group hover:border-violet-500/40 transition-all duration-300 hover:-translate-y-1">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-violet-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-violet-500/10 transition-colors" />
-          <div className="flex items-center justify-between text-xs text-slate-400">
-            <span className="font-semibold uppercase tracking-wider text-[10px]">Composite Readiness</span>
-            <div className="h-8 w-8 rounded-xl bg-violet-950/80 border border-violet-800/40 flex items-center justify-center text-violet-400">
-              <TrendingUp className="h-4 w-4" />
-            </div>
-          </div>
-          <p className="text-3xl font-extrabold text-gradient-primary mt-3 font-mono tracking-tight">
-            {analytics.averageScore !== null ? `${analytics.averageScore}%` : "—"}
-          </p>
-          <div className="text-[11px] text-slate-400 mt-2 truncate">
-            {analytics.averageScore !== null ? (
-              <span className={analytics.averageScore >= 88 ? "text-emerald-400 font-medium" : analytics.averageScore >= 72 ? "text-indigo-300 font-medium" : "text-amber-400 font-medium"}>
-                {analytics.averageScore >= 88 ? "Strong Hire Tier" : analytics.averageScore >= 72 ? "Hire Recommendation Tier" : "Additional Review Tier"}
-              </span>
-            ) : (
-              <span className="text-slate-500 font-mono">Benchmark pending 1st session</span>
-            )}
-          </div>
-        </Card>
+            {/* Recruiter Card 2: Shortlisted Talent */}
+            <Card className="p-5 relative overflow-hidden group hover:border-emerald-500/40 transition-all duration-300 hover:-translate-y-1">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-emerald-500/10 transition-colors" />
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span className="font-semibold uppercase tracking-wider text-[10px]">Shortlisted Talent</span>
+                <div className="h-8 w-8 rounded-xl bg-emerald-950/80 border border-emerald-800/40 flex items-center justify-center text-emerald-400">
+                  <Star className="h-4 w-4 fill-current" />
+                </div>
+              </div>
+              <p className="text-3xl font-extrabold text-emerald-400 mt-3 font-mono tracking-tight">
+                {recruiterStats.shortlisted}
+              </p>
+              <div className="text-[11px] text-slate-400 mt-2">
+                <span className="text-emerald-400 font-medium font-mono">{recruiterStats.shortlistRate}%</span>{" "}
+                <span className="text-slate-400">conversion rate</span>
+              </div>
+            </Card>
 
-        {/* Card 3: Strongest Competency */}
-        <Card className="p-5 relative overflow-hidden group hover:border-emerald-500/40 transition-all duration-300 hover:-translate-y-1">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-emerald-500/10 transition-colors" />
-          <div className="flex items-center justify-between text-xs text-slate-400">
-            <span className="font-semibold uppercase tracking-wider text-[10px]">Top Competency</span>
-            <div className="h-8 w-8 rounded-xl bg-emerald-950/80 border border-emerald-800/40 flex items-center justify-center text-emerald-400">
-              <Award className="h-4 w-4" />
-            </div>
-          </div>
-          <p className="text-lg font-bold text-white mt-3 truncate">
-            {analytics.strongest ? analytics.strongest.category : "Pending Analysis"}
-          </p>
-          <div className="text-[11px] text-slate-400 mt-2">
-            {analytics.strongest ? (
-              <span className="text-emerald-400 font-medium font-mono">
-                {analytics.strongest.avgScore}% • {analytics.strongest.level}
-              </span>
-            ) : (
-              <span className="text-slate-500 font-mono">Unlocks after 1st interview</span>
-            )}
-          </div>
-        </Card>
+            {/* Recruiter Card 3: Batch Average Score */}
+            <Card className="p-5 relative overflow-hidden group hover:border-indigo-500/40 transition-all duration-300 hover:-translate-y-1">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-indigo-500/10 transition-colors" />
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span className="font-semibold uppercase tracking-wider text-[10px]">Batch Average Score</span>
+                <div className="h-8 w-8 rounded-xl bg-indigo-950/80 border border-indigo-800/40 flex items-center justify-center text-indigo-400">
+                  <TrendingUp className="h-4 w-4" />
+                </div>
+              </div>
+              <p className="text-3xl font-extrabold text-gradient-primary mt-3 font-mono tracking-tight">
+                {recruiterStats.avgScore}%
+              </p>
+              <div className="text-[11px] text-slate-400 mt-2 truncate">
+                <span className={recruiterStats.avgScore >= 80 ? "text-emerald-400 font-medium" : "text-amber-400 font-medium"}>
+                  {recruiterStats.avgScore >= 80 ? "High Caliber Applicant Pool" : "Standard Applicant Benchmark"}
+                </span>
+              </div>
+            </Card>
 
-        {/* Card 4: Improvement Priority */}
-        <Card className="p-5 relative overflow-hidden group hover:border-amber-500/40 transition-all duration-300 hover:-translate-y-1">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-amber-500/10 transition-colors" />
-          <div className="flex items-center justify-between text-xs text-slate-400">
-            <span className="font-semibold uppercase tracking-wider text-[10px]">Improvement Focus</span>
-            <div className="h-8 w-8 rounded-xl bg-amber-950/80 border border-amber-800/40 flex items-center justify-center text-amber-400">
-              <Target className="h-4 w-4" />
-            </div>
-          </div>
-          <p className="text-lg font-bold text-white mt-3 truncate">
-            {analytics.priority ? analytics.priority.category : "Pending Analysis"}
-          </p>
-          <div className="text-[11px] text-slate-400 mt-2">
-            {analytics.priority ? (
-              <span className="text-amber-400 font-medium font-mono">
-                {analytics.priority.avgScore}% • Priority Drill
-              </span>
-            ) : (
-              <span className="text-slate-500 font-mono">Unlocks after 1st interview</span>
-            )}
-          </div>
-        </Card>
+            {/* Recruiter Card 4: Awaiting Decision */}
+            <Card className="p-5 relative overflow-hidden group hover:border-amber-500/40 transition-all duration-300 hover:-translate-y-1">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-amber-500/10 transition-colors" />
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span className="font-semibold uppercase tracking-wider text-[10px]">Awaiting Decision</span>
+                <div className="h-8 w-8 rounded-xl bg-amber-950/80 border border-amber-800/40 flex items-center justify-center text-amber-400">
+                  <Clock3 className="h-4 w-4" />
+                </div>
+              </div>
+              <p className="text-3xl font-extrabold text-amber-400 mt-3 font-mono tracking-tight">
+                {recruiterStats.pending + recruiterStats.underReview}
+              </p>
+              <div className="text-[11px] text-slate-400 mt-2 truncate">
+                <span className="text-amber-300 font-mono">{recruiterStats.pending}</span> pending ·{" "}
+                <span className="text-amber-400 font-mono">{recruiterStats.underReview}</span> in review
+              </div>
+            </Card>
+          </>
+        ) : (
+          <>
+            {/* Candidate Card 1: Completed Audits */}
+            <Card className="p-5 relative overflow-hidden group hover:border-indigo-500/40 transition-all duration-300 hover:-translate-y-1">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-indigo-500/10 transition-colors" />
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span className="font-semibold uppercase tracking-wider text-[10px]">Completed Audits</span>
+                <div className="h-8 w-8 rounded-xl bg-indigo-950/80 border border-indigo-800/40 flex items-center justify-center text-indigo-400">
+                  <FileText className="h-4 w-4" />
+                </div>
+              </div>
+              <p className="text-3xl font-extrabold text-white mt-3 font-mono tracking-tight">
+                {analytics.completedCount}
+              </p>
+              <div className="text-[11px] text-slate-400 mt-2 flex items-center gap-1.5">
+                {analytics.completedCount > 0 ? (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                    <span className="text-emerald-400 font-medium">Verified evaluation records</span>
+                  </>
+                ) : (
+                  <span className="text-slate-500 font-mono">0 sessions logged yet</span>
+                )}
+              </div>
+            </Card>
+
+            {/* Candidate Card 2: Composite Score */}
+            <Card className="p-5 relative overflow-hidden group hover:border-violet-500/40 transition-all duration-300 hover:-translate-y-1">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-violet-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-violet-500/10 transition-colors" />
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span className="font-semibold uppercase tracking-wider text-[10px]">Composite Readiness</span>
+                <div className="h-8 w-8 rounded-xl bg-violet-950/80 border border-violet-800/40 flex items-center justify-center text-violet-400">
+                  <TrendingUp className="h-4 w-4" />
+                </div>
+              </div>
+              <p className="text-3xl font-extrabold text-gradient-primary mt-3 font-mono tracking-tight">
+                {analytics.averageScore !== null ? `${analytics.averageScore}%` : "—"}
+              </p>
+              <div className="text-[11px] text-slate-400 mt-2 truncate">
+                {analytics.averageScore !== null ? (
+                  <span className={analytics.averageScore >= 88 ? "text-emerald-400 font-medium" : analytics.averageScore >= 72 ? "text-indigo-300 font-medium" : "text-amber-400 font-medium"}>
+                    {analytics.averageScore >= 88 ? "Strong Hire Tier" : analytics.averageScore >= 72 ? "Hire Recommendation Tier" : "Additional Review Tier"}
+                  </span>
+                ) : (
+                  <span className="text-slate-500 font-mono">Benchmark pending 1st session</span>
+                )}
+              </div>
+            </Card>
+
+            {/* Candidate Card 3: Strongest Competency */}
+            <Card className="p-5 relative overflow-hidden group hover:border-emerald-500/40 transition-all duration-300 hover:-translate-y-1">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-emerald-500/10 transition-colors" />
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span className="font-semibold uppercase tracking-wider text-[10px]">Top Competency</span>
+                <div className="h-8 w-8 rounded-xl bg-emerald-950/80 border border-emerald-800/40 flex items-center justify-center text-emerald-400">
+                  <Award className="h-4 w-4" />
+                </div>
+              </div>
+              <p className="text-lg font-bold text-white mt-3 truncate">
+                {analytics.strongest ? analytics.strongest.category : "Pending Analysis"}
+              </p>
+              <div className="text-[11px] text-slate-400 mt-2">
+                {analytics.strongest ? (
+                  <span className="text-emerald-400 font-medium font-mono">
+                    {analytics.strongest.avgScore}% • {analytics.strongest.level}
+                  </span>
+                ) : (
+                  <span className="text-slate-500 font-mono">Unlocks after 1st interview</span>
+                )}
+              </div>
+            </Card>
+
+            {/* Candidate Card 4: Improvement Priority */}
+            <Card className="p-5 relative overflow-hidden group hover:border-amber-500/40 transition-all duration-300 hover:-translate-y-1">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-amber-500/10 transition-colors" />
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span className="font-semibold uppercase tracking-wider text-[10px]">Improvement Focus</span>
+                <div className="h-8 w-8 rounded-xl bg-amber-950/80 border border-amber-800/40 flex items-center justify-center text-amber-400">
+                  <Target className="h-4 w-4" />
+                </div>
+              </div>
+              <p className="text-lg font-bold text-white mt-3 truncate">
+                {analytics.priority ? analytics.priority.category : "Pending Analysis"}
+              </p>
+              <div className="text-[11px] text-slate-400 mt-2">
+                {analytics.priority ? (
+                  <span className="text-amber-400 font-medium font-mono">
+                    {analytics.priority.avgScore}% • Priority Drill
+                  </span>
+                ) : (
+                  <span className="text-slate-500 font-mono">Unlocks after 1st interview</span>
+                )}
+              </div>
+            </Card>
+          </>
+        )}
       </div>
 
       {/* 3. SEGMENTED TABS NAVIGATION */}
-      <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-[#0a0f1d]/90 border border-indigo-950/80 backdrop-blur-xl overflow-x-auto">
-        <button
-          onClick={() => setActiveTab("overview")}
-          className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
-            activeTab === "overview"
-              ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-950/80"
-              : "text-slate-400 hover:text-slate-200 hover:bg-[#131d35]/60"
-          }`}
-        >
-          <Layers className="h-4 w-4" />
-          Overview Command
-        </button>
-
-        <button
-          onClick={() => setActiveTab("history")}
-          className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
-            activeTab === "history"
-              ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-950/80"
-              : "text-slate-400 hover:text-slate-200 hover:bg-[#131d35]/60"
-          }`}
-        >
-          <History className="h-4 w-4" />
-          Evaluation History ({reports.length})
-        </button>
-
-        <button
-          onClick={() => setActiveTab("skills")}
-          className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
-            activeTab === "skills"
-              ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-950/80"
-              : "text-slate-400 hover:text-slate-200 hover:bg-[#131d35]/60"
-          }`}
-        >
-          <BrainCircuit className="h-4 w-4" />
-          Skills & Diagnostics
-        </button>
-
-        <button
-          onClick={() => setActiveTab("settings")}
-          className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
-            activeTab === "settings"
-              ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-950/80"
-              : "text-slate-400 hover:text-slate-200 hover:bg-[#131d35]/60"
-          }`}
-        >
-          <User className="h-4 w-4" />
-          Profile Configuration
-        </button>
-
-        {isRecruiter && (
+      {isRecruiter ? (
+        <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-[#0a0f1d]/90 border border-violet-950/80 backdrop-blur-xl overflow-x-auto">
           <button
             onClick={() => setActiveTab("pipeline")}
             className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
@@ -467,13 +769,84 @@ export default function DashboardPage() {
             }`}
           >
             <Users className="h-4 w-4" />
-            Candidate Pipeline
-            <span className="ml-0.5 h-4.5 min-w-[1.125rem] rounded-full bg-violet-600/80 text-[10px] font-bold flex items-center justify-center px-1">
-              {reports.length}
-            </span>
+            Candidate Pipeline ({reports.length})
           </button>
-        )}
-      </div>
+
+          <button
+            onClick={() => setActiveTab("analytics")}
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
+              activeTab === "analytics"
+                ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-md shadow-violet-950/80"
+                : "text-slate-400 hover:text-slate-200 hover:bg-[#131d35]/60"
+            }`}
+          >
+            <BarChart3 className="h-4 w-4" />
+            Company Hiring Analytics
+          </button>
+
+          <button
+            onClick={() => setActiveTab("history")}
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
+              activeTab === "history"
+                ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-md shadow-violet-950/80"
+                : "text-slate-400 hover:text-slate-200 hover:bg-[#131d35]/60"
+            }`}
+          >
+            <History className="h-4 w-4" />
+            All Candidate Transcripts ({reports.length})
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-[#0a0f1d]/90 border border-indigo-950/80 backdrop-blur-xl overflow-x-auto">
+          <button
+            onClick={() => setActiveTab("overview")}
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
+              activeTab === "overview"
+                ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-950/80"
+                : "text-slate-400 hover:text-slate-200 hover:bg-[#131d35]/60"
+            }`}
+          >
+            <Layers className="h-4 w-4" />
+            Overview Command
+          </button>
+
+          <button
+            onClick={() => setActiveTab("history")}
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
+              activeTab === "history"
+                ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-950/80"
+                : "text-slate-400 hover:text-slate-200 hover:bg-[#131d35]/60"
+            }`}
+          >
+            <History className="h-4 w-4" />
+            My Evaluation History ({reports.length})
+          </button>
+
+          <button
+            onClick={() => setActiveTab("skills")}
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
+              activeTab === "skills"
+                ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-950/80"
+                : "text-slate-400 hover:text-slate-200 hover:bg-[#131d35]/60"
+            }`}
+          >
+            <BrainCircuit className="h-4 w-4" />
+            Skills & Diagnostics
+          </button>
+
+          <button
+            onClick={() => setActiveTab("settings")}
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
+              activeTab === "settings"
+                ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-950/80"
+                : "text-slate-400 hover:text-slate-200 hover:bg-[#131d35]/60"
+            }`}
+          >
+            <User className="h-4 w-4" />
+            Profile Configuration
+          </button>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* TAB 1: OVERVIEW                                                           */}
@@ -609,6 +982,135 @@ export default function DashboardPage() {
           ) : (
             /* RETURNING CANDIDATE EXPERIENCE WITH REAL EVALUATIONS */
             <div className="space-y-6">
+              {/* CANDIDATE COMPANY APPLICATION & SHORTLIST DECISION BANNER (GLASSMORPHISM) */}
+              {!isRecruiter && (() => {
+                const candidateLatestReport = reports.length > 0 ? reports[0] : null;
+                const candidateEffectiveStatus = (pipelineShortlists[candidateLatestReport?.sessionId || ""] ?? candidateLatestReport?.shortlistStatus ?? "pending") as ShortlistStatus;
+                const candidateEffectiveNotes = pipelineNotes[candidateLatestReport?.sessionId || ""] ?? candidateLatestReport?.shortlistNotes;
+
+                return (
+                  <div className="relative rounded-3xl border border-white/10 bg-gradient-to-r from-[#0c1428]/95 via-[#0e162d]/90 to-[#18112e]/95 backdrop-blur-2xl p-6 sm:p-7 shadow-2xl shadow-indigo-950/60 overflow-hidden">
+                    <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent" />
+                    <div className="absolute -top-10 -right-10 w-60 h-60 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+
+                    <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
+                      <div className="space-y-3 max-w-2xl">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-[#121c38] text-indigo-300 border border-indigo-700/40">
+                            <Building2 className="h-3.5 w-3.5 text-indigo-400" />
+                            Reviewing Company: TechCorp Global
+                          </span>
+                          <span className="text-xs text-slate-400 font-mono">
+                            Hiring Lead: Sarah Jenkins
+                          </span>
+                        </div>
+
+                        {candidateEffectiveStatus === "shortlisted" && (
+                          <>
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-950/90 text-emerald-300 border border-emerald-500/60 shadow-lg shadow-emerald-950/60">
+                                <Star className="h-3.5 w-3.5 text-emerald-400 fill-emerald-400" />
+                                Application Shortlisted ⭐
+                              </span>
+                              <Badge variant="success" className="text-[10px]">Decision Confirmed</Badge>
+                            </div>
+                            <h2 className="text-2xl font-extrabold text-white tracking-tight">
+                              Congratulations, {displayName}! You have been Shortlisted.
+                            </h2>
+                            <p className="text-sm text-slate-300 leading-relaxed">
+                              Your interview performance met the hiring bar for the {roleName} role. Sarah Jenkins has advanced your profile to the candidate shortlist.
+                            </p>
+                          </>
+                        )}
+
+                        {candidateEffectiveStatus === "under-review" && (
+                          <>
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-950/90 text-amber-300 border border-amber-500/60 shadow-lg shadow-amber-950/60">
+                                <Clock3 className="h-3.5 w-3.5 text-amber-400" />
+                                Under Active Review ⏳
+                              </span>
+                            </div>
+                            <h2 className="text-2xl font-extrabold text-white tracking-tight">
+                              Interview Record Under Review by Company Head
+                            </h2>
+                            <p className="text-sm text-slate-300 leading-relaxed">
+                              Your interview transcript, answers, and competency metrics are currently being evaluated by the TechCorp Global talent committee.
+                            </p>
+                          </>
+                        )}
+
+                        {candidateEffectiveStatus === "rejected" && (
+                          <>
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-950/90 text-rose-300 border border-rose-600/50">
+                                <XCircle className="h-3.5 w-3.5 text-rose-400" />
+                                Application Feedback Provided
+                              </span>
+                            </div>
+                            <h2 className="text-2xl font-extrabold text-white tracking-tight">
+                              Interview Completed — Diagnostic Review
+                            </h2>
+                            <p className="text-sm text-slate-300 leading-relaxed">
+                              Thank you for completing the technical assessment. Review your competency breakdown below to target specific growth areas for future openings.
+                            </p>
+                          </>
+                        )}
+
+                        {candidateEffectiveStatus === "pending" && (
+                          <>
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-indigo-950/90 text-indigo-300 border border-indigo-700/50">
+                                <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
+                                Interview Record Ready
+                              </span>
+                            </div>
+                            <h2 className="text-2xl font-extrabold text-white tracking-tight">
+                              Welcome to Your Candidate Portal
+                            </h2>
+                            <p className="text-sm text-slate-300 leading-relaxed">
+                              Your evaluation history and scores are linked to this account and accessible only to you and authorized company evaluators.
+                            </p>
+                          </>
+                        )}
+
+                        {/* Recruiter Notes (if provided by company head) */}
+                        {candidateEffectiveNotes && (
+                          <div className="mt-3 p-3.5 rounded-2xl bg-white/[0.04] border border-white/10 backdrop-blur-md">
+                            <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider mb-1 flex items-center gap-1">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-indigo-400" />
+                              Hiring Manager Notes (Sarah Jenkins):
+                            </p>
+                            <p className="text-xs text-slate-200 italic font-medium leading-relaxed">
+                              &ldquo;{candidateEffectiveNotes}&rdquo;
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row md:flex-col gap-2.5 shrink-0">
+                        {candidateLatestReport && (
+                          <Link href={`/report/${candidateLatestReport.sessionId}`}>
+                            <Button size="sm" variant="secondary" className="gap-2 text-xs h-9 w-full">
+                              <FileText className="h-4 w-4 text-indigo-400" />
+                              View Full Audit Report
+                            </Button>
+                          </Link>
+                        )}
+                        <Button
+                          size="sm"
+                          onClick={() => handleStartNewInterview()}
+                          className="gap-2 text-xs h-9 w-full bg-indigo-600 hover:bg-indigo-500 font-bold shadow-lg shadow-indigo-600/30"
+                        >
+                          <Play className="h-3.5 w-3.5 fill-current" />
+                          Retake Technical Interview
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Quick Launch & Competency Readiness Grid */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Left: Quick Launch Card */}
@@ -987,35 +1489,84 @@ export default function DashboardPage() {
               {/* Competency Grid */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Skill Matrix & Proficiency Diagnostics</CardTitle>
-                  <CardDescription>
-                    Granular competencies calibrated against your actual answers across {reports.length} evaluation session{reports.length > 1 ? "s" : ""}.
-                  </CardDescription>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <CardTitle>Skill Matrix & Proficiency Diagnostics</CardTitle>
+                      <CardDescription>
+                        Granular competencies calibrated against your actual answers across {reports.length} evaluation session{reports.length > 1 ? "s" : ""}.
+                      </CardDescription>
+                    </div>
+
+                    {/* Truthful 3-Tier Category Distribution Pills */}
+                    <div className="flex items-center gap-2 flex-wrap text-xs">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/70 border border-emerald-500/50 text-emerald-300 font-semibold shadow-sm">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                        Demonstrated: {analytics.statusCounts.demonstrated}
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-950/70 border border-amber-500/50 text-amber-300 font-semibold shadow-sm">
+                        <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
+                        Claimed but Unvalidated: {analytics.statusCounts.claimedUnvalidated}
+                      </span>
+                      {analytics.statusCounts.notAssessed > 0 && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900/90 border border-slate-700/60 text-slate-300 font-semibold shadow-sm">
+                          <FileQuestion className="h-3.5 w-3.5 text-slate-400" />
+                          Not Yet Assessed: {analytics.statusCounts.notAssessed}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {analytics.competencies.map((metric) => (
                       <div
                         key={metric.category}
-                        className="space-y-2 p-4.5 rounded-2xl border border-[#1e2d4f] bg-[#0a0f1d] hover:border-indigo-700/50 transition-colors"
+                        className="space-y-2.5 p-4.5 rounded-2xl border border-[#1e2d4f] bg-[#0a0f1d] hover:border-indigo-700/50 transition-colors"
                       >
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="font-bold text-white truncate max-w-[200px]">
-                            {metric.category}
-                          </span>
-                          <Badge
-                            variant={metric.avgScore >= 90 ? "success" : metric.avgScore >= 82 ? "indigo" : "default"}
-                          >
-                            {metric.level} • {metric.avgScore}%
-                          </Badge>
+                        <div className="flex justify-between items-start gap-2">
+                          <div>
+                            <span className="font-bold text-white text-sm block">
+                              {metric.category}
+                            </span>
+                            <span className="text-[11px] text-slate-400 font-mono">
+                              {metric.count} answer turn{metric.count > 1 ? "s" : ""} evaluated
+                            </span>
+                          </div>
+
+                          <div className="flex flex-col items-end gap-1">
+                            <Badge
+                              variant={metric.avgScore >= 90 ? "success" : metric.avgScore >= 82 ? "indigo" : "default"}
+                            >
+                              {metric.level} • {metric.avgScore}%
+                            </Badge>
+                            {/* 3-Tier Status Category Badge */}
+                            {metric.status === "demonstrated" && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-500/50">
+                                <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                                Demonstrated
+                              </span>
+                            )}
+                            {metric.status === "claimed_unvalidated" && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-500/50">
+                                <AlertTriangle className="h-3 w-3 text-amber-400" />
+                                Claimed but Unvalidated
+                              </span>
+                            )}
+                            {metric.status === "not_assessed" && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-slate-900/90 text-slate-300 border border-slate-700/60">
+                                <FileQuestion className="h-3 w-3 text-slate-400" />
+                                Not Yet Assessed
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <Progress
                           value={metric.avgScore}
                           indicatorColor={metric.avgScore >= 90 ? "emerald" : metric.avgScore >= 82 ? "indigo" : "amber"}
                           size="md"
                         />
-                        <p className="text-[11px] text-slate-400 pt-1">
-                          Evaluated across {metric.count} turn{metric.count > 1 ? "s" : ""} with keyword alignment.
+                        <p className="text-[11px] text-slate-400 pt-0.5">
+                          Evaluated with verified keyword alignment and technical depth.
                         </p>
                       </div>
                     ))}
@@ -1163,19 +1714,30 @@ export default function DashboardPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 5: RECRUITER CANDIDATE PIPELINE                                       */}
+      {/* TAB 5: RECRUITER CANDIDATE PIPELINE (COMPANY HEAD ACCESS)                */}
       {/* ========================================================================= */}
       {activeTab === "pipeline" && isRecruiter && (() => {
-        const statusMeta: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-          shortlisted:   { label: "Shortlisted",    color: "text-emerald-400", icon: <Star className="h-3.5 w-3.5" /> },
-          "under-review": { label: "Under Review",   color: "text-amber-400",   icon: <Clock3 className="h-3.5 w-3.5" /> },
-          rejected:      { label: "Rejected",       color: "text-rose-400",    icon: <XCircle className="h-3.5 w-3.5" /> },
-          pending:       { label: "Pending Review",  color: "text-slate-400",   icon: <Building2 className="h-3.5 w-3.5" /> },
+        const statusMeta: Record<string, { label: string; color: string; icon: React.ReactNode; bg: string }> = {
+          shortlisted:   { label: "Shortlisted",    color: "text-emerald-400", icon: <Star className="h-3.5 w-3.5" />, bg: "bg-emerald-950/80 border-emerald-500/60" },
+          "under-review": { label: "Under Review",   color: "text-amber-400",   icon: <Clock3 className="h-3.5 w-3.5" />, bg: "bg-amber-950/80 border-amber-500/60" },
+          rejected:      { label: "Rejected",       color: "text-rose-400",    icon: <XCircle className="h-3.5 w-3.5" />, bg: "bg-rose-950/80 border-rose-500/60" },
+          pending:       { label: "Pending Review",  color: "text-slate-400",   icon: <Building2 className="h-3.5 w-3.5" />, bg: "bg-slate-900 border-slate-700" },
         };
 
         const filteredReports = reports.filter((rep) => {
-          const effectiveStatus = pipelineShortlists[rep.sessionId] ?? rep.shortlistStatus ?? "pending";
-          return pipelineFilter === "all" || effectiveStatus === pipelineFilter;
+          const effectiveStatus = (pipelineShortlists[rep.sessionId] ?? rep.shortlistStatus ?? "pending") as ShortlistStatus;
+          const matchesStatus = pipelineFilter === "all" || effectiveStatus === pipelineFilter;
+          const matchesRole = pipelineRoleFilter === "all" || rep.targetRole.toLowerCase().includes(pipelineRoleFilter.toLowerCase());
+          const matchesScore =
+            pipelineScoreFilter === "all" ||
+            (pipelineScoreFilter === "top" && rep.overallScore >= 85) ||
+            (pipelineScoreFilter === "solid" && rep.overallScore >= 75 && rep.overallScore < 85) ||
+            (pipelineScoreFilter === "needs-work" && rep.overallScore < 75);
+          const matchesSearch = !pipelineSearch.trim() || 
+            rep.candidateName.toLowerCase().includes(pipelineSearch.toLowerCase()) ||
+            rep.targetRole.toLowerCase().includes(pipelineSearch.toLowerCase()) ||
+            (rep.shortlistNotes && rep.shortlistNotes.toLowerCase().includes(pipelineSearch.toLowerCase()));
+          return matchesStatus && matchesRole && matchesScore && matchesSearch;
         });
 
         const pipelineCounts = {
@@ -1186,34 +1748,40 @@ export default function DashboardPage() {
           pending: reports.filter((r) => (pipelineShortlists[r.sessionId] ?? r.shortlistStatus ?? "pending") === "pending").length,
         };
 
+        const avgScore = reports.length > 0 
+          ? Math.round(reports.reduce((acc, r) => acc + (r.overallScore || 0), 0) / reports.length) 
+          : 0;
+
         return (
           <div className="space-y-6">
-            {/* Pipeline Header */}
+            {/* Pipeline Header (Glassmorphic Command Center) */}
             <div className="relative rounded-3xl border border-violet-500/20 bg-gradient-to-r from-[#0d0e24]/95 via-[#0b0c21]/95 to-[#070814]/95 backdrop-blur-2xl p-6 sm:p-8 shadow-2xl shadow-violet-950/30 overflow-hidden">
               <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-violet-500/50 to-transparent" />
-              <div className="absolute top-0 right-1/4 w-80 h-32 bg-violet-500/8 rounded-full blur-3xl pointer-events-none" />
-              <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-5">
+              <div className="absolute top-0 right-1/4 w-80 h-32 bg-violet-500/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide bg-violet-950/80 text-violet-300 border border-violet-700/40 shadow-inner">
                       <Users className="h-3.5 w-3.5 text-violet-400" />
-                      Talent Acquisition Pipeline
+                      Company Head Portal · TechCorp Global
                     </span>
-                    {user?.name && (
-                      <Badge variant="success" className="text-[11px]">
-                        <ShieldCheck className="h-3 w-3 mr-1" />
-                        {user.name}
-                      </Badge>
-                    )}
+                    <Badge variant="success" className="text-[11px]">
+                      <ShieldCheck className="h-3 w-3 mr-1" />
+                      Hiring Lead: {user?.name || "Sarah Jenkins"}
+                    </Badge>
                   </div>
                   <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                    Candidate Evaluation Pipeline
+                    Candidate Evaluation & Shortlist Authority
                   </h2>
                   <p className="text-sm text-slate-300 max-w-xl leading-relaxed">
-                    Review AI-verified evaluation reports, manage shortlist decisions, and track candidate readiness across all completed interview sessions.
+                    Exclusive command center for company leadership. Full access to candidate transcripts, question breakdowns, and one-click Shortlist/Reject controls with persistent notes.
                   </p>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 shrink-0">
+                  <div className="rounded-xl border border-indigo-900/40 bg-[#0a0f1d] p-3 text-center">
+                    <p className="text-xl font-extrabold font-mono text-indigo-300">{pipelineCounts.all}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Total Pool</p>
+                  </div>
                   {(["shortlisted", "under-review", "pending", "rejected"] as const).map((s) => (
                     <div key={s} className="rounded-xl border border-[#1e2d4f] bg-[#0a0f1d] p-3 text-center">
                       <p className={`text-xl font-extrabold font-mono ${statusMeta[s].color}`}>{pipelineCounts[s]}</p>
@@ -1224,73 +1792,159 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Pipeline Filter Bar */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="flex items-center gap-1.5 text-xs text-slate-400 font-medium mr-1">
-                <Filter className="h-3.5 w-3.5" /> Filter:
-              </span>
-              {(["all", "shortlisted", "under-review", "pending", "rejected"] as const).map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setPipelineFilter(f)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                    pipelineFilter === f
-                      ? "bg-violet-600 text-white border-violet-500 shadow-md"
-                      : "bg-[#0a0f1d] text-slate-400 border-[#1e2d4f] hover:border-violet-700/50 hover:text-slate-200"
-                  }`}
-                >
-                  {f !== "all" && statusMeta[f].icon}
-                  {f === "all" ? `All (${pipelineCounts.all})` : `${statusMeta[f].label} (${pipelineCounts[f]})`}
-                </button>
-              ))}
+            {/* Pipeline Search & Filter Bar */}
+            <div className="p-4 rounded-2xl border border-indigo-950/80 bg-[#0a0f1d]/90 backdrop-blur-xl flex flex-col gap-3">
+              <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+                {/* Search input */}
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Search candidate by name, role, or keywords..."
+                    value={pipelineSearch}
+                    onChange={(e) => setPipelineSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-[#1e2d4f] bg-[#070b16] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-violet-500 transition-colors"
+                  />
+                </div>
+
+                {/* Role Selector */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <Briefcase className="h-3.5 w-3.5 text-slate-400" />
+                  <select
+                    value={pipelineRoleFilter}
+                    onChange={(e) => setPipelineRoleFilter(e.target.value)}
+                    className="bg-[#070b16] border border-[#1e2d4f] rounded-xl text-xs text-slate-300 px-3 py-1.5 focus:outline-none focus:border-violet-500"
+                  >
+                    <option value="all">All Tracks ({reports.length})</option>
+                    <option value="fullstack">Full Stack</option>
+                    <option value="frontend">Frontend</option>
+                    <option value="backend">Backend</option>
+                    <option value="python">Python</option>
+                    <option value="data-analyst">Data Analyst</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Secondary Filters: Status & Score Tiers */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[#1a2542]">
+                {/* Score Tier Buttons */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="flex items-center gap-1 text-xs text-slate-400 font-medium mr-1">
+                    <Target className="h-3 w-3 text-indigo-400" /> Score Tier:
+                  </span>
+                  {(
+                    [
+                      { id: "all", label: "All Scores" },
+                      { id: "top", label: "≥85% Top Talent" },
+                      { id: "solid", label: "75–84% Solid" },
+                      { id: "needs-work", label: "<75% Needs Drill" },
+                    ] as const
+                  ).map((sf) => (
+                    <button
+                      key={sf.id}
+                      onClick={() => setPipelineScoreFilter(sf.id)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                        pipelineScoreFilter === sf.id
+                          ? "bg-indigo-600 text-white border-indigo-400 shadow-sm"
+                          : "bg-[#070b16] text-slate-400 border-[#1e2d4f] hover:text-slate-200"
+                      }`}
+                    >
+                      {sf.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Status Filter Buttons */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="flex items-center gap-1 text-xs text-slate-400 font-medium mr-1">
+                    <Filter className="h-3 w-3 text-violet-400" /> Decision:
+                  </span>
+                  {(["all", "shortlisted", "under-review", "pending", "rejected"] as const).map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => setPipelineFilter(f)}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                        pipelineFilter === f
+                          ? "bg-violet-600 text-white border-violet-500 shadow-md"
+                          : "bg-[#070b16] text-slate-400 border-[#1e2d4f] hover:border-violet-700/50 hover:text-slate-200"
+                      }`}
+                    >
+                      {f !== "all" && statusMeta[f].icon}
+                      {f === "all" ? `All (${pipelineCounts.all})` : `${statusMeta[f].label} (${pipelineCounts[f]})`}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
-            {/* Candidate Cards */}
+            {/* Candidate Evaluation Cards */}
             {filteredReports.length === 0 ? (
               <Card className="p-10 text-center">
                 <div className="h-12 w-12 rounded-2xl bg-violet-950/70 border border-violet-800/40 flex items-center justify-center text-violet-400 mx-auto mb-4">
                   <Users className="h-6 w-6" />
                 </div>
-                <h3 className="text-base font-bold text-white mb-1">No candidates in this filter</h3>
-                <p className="text-xs text-slate-400">Change the filter above to see other pipeline stages.</p>
+                <h3 className="text-base font-bold text-white mb-1">No candidates match your filters</h3>
+                <p className="text-xs text-slate-400">Clear search or change filter buttons above to view other candidate submissions.</p>
               </Card>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {filteredReports.map((rep) => {
-                  const effectiveStatus = (pipelineShortlists[rep.sessionId] ?? rep.shortlistStatus ?? "pending") as string;
+                  const effectiveStatus = (pipelineShortlists[rep.sessionId] ?? rep.shortlistStatus ?? "pending") as ShortlistStatus;
+                  const currentNotes = pipelineNotes[rep.sessionId] ?? rep.shortlistNotes ?? "";
                   const meta = statusMeta[effectiveStatus] ?? statusMeta["pending"];
+                  const isEditingNote = editingNoteSessionId === rep.sessionId;
                   const verdictColor = rep.overallScore >= 88 ? "text-emerald-400" : rep.overallScore >= 72 ? "text-indigo-400" : "text-amber-400";
+                  const isQnaExpanded = expandedTranscriptSessionId === rep.sessionId;
 
                   return (
-                    <Card key={rep.sessionId} className="hover:border-violet-700/60 transition-all bg-[#0c1120]/95">
-                      <div className="p-5">
+                    <Card
+                      key={rep.sessionId}
+                      className="border border-[#1e2d4f] hover:border-violet-600/50 transition-all bg-[#0a0f1d]/95 overflow-hidden shadow-xl"
+                    >
+                      <div className="p-5 sm:p-6 space-y-4">
                         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                           {/* Left: Candidate Info */}
                           <div className="flex items-start gap-4 flex-1 min-w-0">
-                            <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-violet-600/30 to-indigo-700/30 border border-violet-800/40 flex items-center justify-center text-violet-300 font-bold text-lg shrink-0">
+                            <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-violet-600/30 to-indigo-700/30 border border-violet-700/40 flex items-center justify-center text-violet-200 font-extrabold text-xl shrink-0 shadow-inner">
                               {rep.candidateName.charAt(0)}
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-2 mb-1">
-                                <span className="font-bold text-white text-base">{rep.candidateName}</span>
-                                <Badge variant={rep.overallScore >= 88 ? "success" : rep.overallScore >= 72 ? "indigo" : "default"} className="text-[11px]">
+                                <span className="font-bold text-white text-lg tracking-tight">{rep.candidateName}</span>
+                                <Badge
+                                  variant={rep.overallScore >= 88 ? "success" : rep.overallScore >= 72 ? "indigo" : "default"}
+                                  className="text-xs font-mono font-bold"
+                                >
                                   {rep.overallScore}% Score
                                 </Badge>
-                                <span className={`flex items-center gap-1 text-[11px] font-medium ${meta.color}`}>
-                                  {meta.icon} {meta.label}
+                                <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-full border ${meta.bg} ${meta.color}`}>
+                                  {meta.icon}
+                                  {meta.label}
                                 </span>
+                                {rep.isDemoSimulation ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-950/40 border border-amber-800/40 text-amber-300">
+                                    Simulated Benchmark
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-950/40 border border-emerald-800/40 text-emerald-300">
+                                    Live AI Assessment
+                                  </span>
+                                )}
                               </div>
                               <p className="text-xs text-slate-400">
-                                {rep.targetRole} • {rep.experienceLevel} • {rep.durationMinutes} min • {rep.completedAt}
+                                <span className="text-slate-300 font-medium">{rep.targetRole}</span> • Seniority: {rep.experienceLevel} • Duration: {rep.durationMinutes} min • Evaluated: {rep.completedAt}
                               </p>
-                              <p className={`text-xs mt-1 font-medium ${verdictColor}`}>
-                                {rep.verdict}
+                              <p className={`text-xs mt-1 font-semibold ${verdictColor}`}>
+                                AI Verdict: {rep.verdict}
                               </p>
-                              {rep.metrics.slice(0, 3).length > 0 && (
-                                <div className="flex flex-wrap gap-2 mt-2">
-                                  {rep.metrics.slice(0, 3).map((m) => (
-                                    <span key={m.category} className="inline-flex items-center gap-1 text-[10px] bg-[#0a0f1d] border border-[#1e2d4f] rounded-md px-2 py-0.5 text-slate-300 font-medium">
-                                      {m.category}: <span className="text-indigo-400 font-mono">{m.score}%</span>
+                              {rep.metrics && rep.metrics.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mt-2.5">
+                                  {rep.metrics.slice(0, 4).map((m) => (
+                                    <span
+                                      key={m.category}
+                                      className="inline-flex items-center gap-1 text-[10px] bg-[#070b16] border border-[#1e2d4f] rounded-lg px-2 py-0.5 text-slate-300 font-medium"
+                                    >
+                                      {m.category}: <span className="text-indigo-400 font-mono font-bold">{m.score}%</span>
                                     </span>
                                   ))}
                                 </div>
@@ -1298,39 +1952,222 @@ export default function DashboardPage() {
                             </div>
                           </div>
 
-                          {/* Right: Actions */}
-                          <div className="flex flex-col sm:flex-row lg:flex-col xl:flex-row items-start sm:items-center gap-3 shrink-0">
-                            {/* Status Selector */}
+                          {/* Right: Authority Actions, Q&A Toggle & Full Report */}
+                          <div className="flex flex-col sm:flex-row lg:flex-col items-start sm:items-end gap-2.5 shrink-0">
+                            {/* Shortlist Decision Group */}
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              {(["shortlisted", "under-review", "pending", "rejected"] as const).map((s) => (
-                                <button
-                                  key={s}
-                                  title={statusMeta[s].label}
-                                  onClick={() => handlePipelineStatusChange(rep.sessionId, rep.candidateName, s)}
-                                  className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold border transition-all ${
-                                    effectiveStatus === s
-                                      ? s === "shortlisted" ? "bg-emerald-600 text-white border-emerald-500"
-                                        : s === "under-review" ? "bg-amber-600 text-white border-amber-500"
-                                        : s === "rejected" ? "bg-rose-700 text-white border-rose-500"
-                                        : "bg-slate-700 text-white border-slate-500"
-                                      : "bg-[#0a0f1d] text-slate-400 border-[#1e2d4f] hover:text-slate-200 hover:border-violet-700/50"
-                                  }`}
-                                >
-                                  <span className={effectiveStatus === s ? "" : statusMeta[s].color}>
-                                    {statusMeta[s].icon}
-                                  </span>
-                                  <span className="hidden sm:inline">{statusMeta[s].label}</span>
-                                </button>
-                              ))}
+                              <span className="text-[11px] text-slate-400 font-medium mr-1 hidden sm:inline">Authority:</span>
+                              
+                              {/* 1. SHORTLIST */}
+                              <button
+                                title="Shortlist candidate for next round"
+                                onClick={() => handlePipelineStatusChange(rep.sessionId, rep.candidateName, "shortlisted")}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                                  effectiveStatus === "shortlisted"
+                                    ? "bg-emerald-600 text-white border-emerald-400 shadow-md shadow-emerald-950/80 scale-105"
+                                    : "bg-[#070b16] text-slate-400 border-[#1e2d4f] hover:text-emerald-300 hover:border-emerald-700/50"
+                                }`}
+                              >
+                                <Star className="h-3.5 w-3.5 fill-current" />
+                                <span>Shortlist</span>
+                              </button>
+
+                              {/* 2. UNDER REVIEW */}
+                              <button
+                                title="Mark candidate under review"
+                                onClick={() => handlePipelineStatusChange(rep.sessionId, rep.candidateName, "under-review")}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                                  effectiveStatus === "under-review"
+                                    ? "bg-amber-600 text-white border-amber-400 shadow-md shadow-amber-950/80 scale-105"
+                                    : "bg-[#070b16] text-slate-400 border-[#1e2d4f] hover:text-amber-300 hover:border-amber-700/50"
+                                }`}
+                              >
+                                <Clock3 className="h-3.5 w-3.5" />
+                                <span>Under Review</span>
+                              </button>
+
+                              {/* 3. REJECT */}
+                              <button
+                                title="Reject candidate with feedback"
+                                onClick={() => handlePipelineStatusChange(rep.sessionId, rep.candidateName, "rejected")}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                                  effectiveStatus === "rejected"
+                                    ? "bg-rose-700 text-white border-rose-400 shadow-md shadow-rose-950/80 scale-105"
+                                    : "bg-[#070b16] text-slate-400 border-[#1e2d4f] hover:text-rose-300 hover:border-rose-700/50"
+                                }`}
+                              >
+                                <XCircle className="h-3.5 w-3.5" />
+                                <span>Reject</span>
+                              </button>
                             </div>
-                            <Link href={`/report/${rep.sessionId}`}>
-                              <Button size="sm" variant="secondary" className="gap-1.5 text-xs whitespace-nowrap h-8">
-                                <FileText className="h-3.5 w-3.5 text-indigo-400" />
-                                Full Report
-                                <ChevronRight className="h-3 w-3 text-slate-500" />
+
+                            {/* Action Buttons: Quick Q&A Drawer Toggle & Full Audit */}
+                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setExpandedTranscriptSessionId(isQnaExpanded ? null : rep.sessionId)}
+                                className="gap-1.5 text-xs h-8 px-3 border-violet-800/60 hover:border-violet-500 text-violet-300 hover:bg-violet-950/40"
+                              >
+                                <Quote className="h-3.5 w-3.5 text-violet-400" />
+                                {isQnaExpanded ? "Close Q&A" : `Quick Q&A (${rep.answerRecords?.length || 0})`}
+                                {isQnaExpanded ? (
+                                  <ChevronUp className="h-3 w-3" />
+                                ) : (
+                                  <ChevronDown className="h-3 w-3" />
+                                )}
                               </Button>
-                            </Link>
+
+                              <Link href={`/report/${rep.sessionId}`}>
+                                <Button size="sm" variant="secondary" className="gap-2 text-xs h-8 px-3 border-indigo-900/50 hover:border-indigo-500/50">
+                                  <FileText className="h-3.5 w-3.5 text-indigo-400" />
+                                  Full Dossier
+                                  <ChevronRight className="h-3 w-3 text-slate-400" />
+                                </Button>
+                              </Link>
+                            </div>
                           </div>
+                        </div>
+
+                        {/* EXPANDABLE QUICK Q&A TRANSCRIPT DRAWER */}
+                        {isQnaExpanded && (
+                          <div className="mt-3 pt-3 border-t border-violet-900/40 rounded-xl bg-[#070b16]/90 p-4 space-y-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Quote className="h-4 w-4 text-violet-400" />
+                                <span className="text-xs font-bold text-white uppercase tracking-wider">
+                                  Verbatim Interview Q&A Transcript ({rep.answerRecords?.length || 0} Questions)
+                                </span>
+                              </div>
+                              <Badge variant="indigo" className="text-[10px]">Gemini AI Evaluated</Badge>
+                            </div>
+
+                            {(!rep.answerRecords || rep.answerRecords.length === 0) ? (
+                              <p className="text-xs text-slate-500 italic">No question-answer transcripts recorded for this session.</p>
+                            ) : (
+                              <div className="space-y-3.5">
+                                {rep.answerRecords.map((ans, qIdx) => (
+                                  <div key={ans.questionId || qIdx} className="rounded-xl border border-[#1e2d4f] bg-[#090e1c] p-3.5 space-y-2.5">
+                                    <div className="flex items-center justify-between flex-wrap gap-2">
+                                      <span className="text-xs font-bold text-violet-300">
+                                        Question #{qIdx + 1}: <span className="text-slate-300 font-medium">{ans.category}</span>
+                                      </span>
+                                      <div className="flex items-center gap-1.5">
+                                        <Badge variant="outline" className="text-[10px] capitalize text-slate-400 border-slate-700">
+                                          {ans.difficulty}
+                                        </Badge>
+                                        <Badge variant={ans.feedback?.score >= 85 ? "success" : ans.feedback?.score >= 70 ? "indigo" : "default"} className="text-[10px] font-mono">
+                                          {ans.feedback?.score ?? 0}% Score
+                                        </Badge>
+                                      </div>
+                                    </div>
+
+                                    <p className="text-xs text-slate-200 font-medium leading-relaxed bg-[#0f172a]/70 p-2.5 rounded-lg border border-[#1e2d4f]">
+                                      {ans.questionText}
+                                    </p>
+
+                                    <div className="space-y-1">
+                                      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                                        Candidate&apos;s Verbatim Response:
+                                      </span>
+                                      <p className="text-xs text-slate-300 font-mono bg-[#050811] p-2.5 rounded-lg border border-[#16213b] leading-relaxed whitespace-pre-wrap">
+                                        &ldquo;{ans.answerText}&rdquo;
+                                      </p>
+                                    </div>
+
+                                    {ans.feedback && (
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-[11px]">
+                                        {ans.feedback.strengths && ans.feedback.strengths.length > 0 && (
+                                          <div className="p-2 rounded-lg bg-emerald-950/30 border border-emerald-800/40 space-y-1">
+                                            <span className="text-emerald-400 font-bold block text-[10px] uppercase">Demonstrated Strengths:</span>
+                                            <ul className="list-disc list-inside text-emerald-200/90 space-y-0.5">
+                                              {ans.feedback.strengths.map((str, sIdx) => (
+                                                <li key={sIdx}>{str}</li>
+                                              ))}
+                                            </ul>
+                                          </div>
+                                        )}
+                                        {ans.feedback.gaps && ans.feedback.gaps.length > 0 && (
+                                          <div className="p-2 rounded-lg bg-amber-950/30 border border-amber-800/40 space-y-1">
+                                            <span className="text-amber-400 font-bold block text-[10px] uppercase">Gaps / Missed Concepts:</span>
+                                            <ul className="list-disc list-inside text-amber-200/90 space-y-0.5">
+                                              {ans.feedback.gaps.map((gp, gIdx) => (
+                                                <li key={gIdx}>{gp}</li>
+                                              ))}
+                                            </ul>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* HIRING MANAGER NOTES & FEEDBACK SECTION */}
+                        <div className="pt-3 border-t border-[#18233d] flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                              <ShieldCheck className="h-3.5 w-3.5 text-violet-400" />
+                              Hiring Committee Notes (Visible to Candidate):
+                            </span>
+                            {!isEditingNote && (
+                              <button
+                                onClick={() => {
+                                  setEditingNoteSessionId(rep.sessionId);
+                                  setEditingNoteDraft(currentNotes);
+                                }}
+                                className="inline-flex items-center gap-1 text-[11px] text-violet-400 hover:text-violet-300 font-semibold"
+                              >
+                                <Edit3 className="h-3 w-3" />
+                                {currentNotes ? "Edit Notes" : "+ Add Recruiter Note"}
+                              </button>
+                            )}
+                          </div>
+
+                          {isEditingNote ? (
+                            <div className="space-y-2 mt-1">
+                              <textarea
+                                rows={2}
+                                value={editingNoteDraft}
+                                onChange={(e) => setEditingNoteDraft(e.target.value)}
+                                placeholder="Enter evaluation notes, decision rationale, or interview invitation details..."
+                                className="w-full p-2.5 rounded-xl border border-violet-600/50 bg-[#070b16] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-violet-400 transition-colors"
+                              />
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setEditingNoteSessionId(null)}
+                                  className="h-7 text-xs text-slate-400 hover:text-white"
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleSaveCandidateNote(rep.sessionId, rep.candidateName, effectiveStatus)}
+                                  className="h-7 text-xs bg-violet-600 hover:bg-violet-500 gap-1 text-white font-bold"
+                                >
+                                  <Save className="h-3 w-3" />
+                                  Save Notes
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="p-3 rounded-xl bg-[#070b16] border border-[#192542] text-xs">
+                              {currentNotes ? (
+                                <p className="text-slate-200 italic leading-relaxed">
+                                  &ldquo;{currentNotes}&rdquo;
+                                </p>
+                              ) : (
+                                <p className="text-slate-500 italic">
+                                  No notes added yet. Click &quot;+ Add Recruiter Note&quot; to leave feedback or next round details.
+                                </p>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </Card>
@@ -1341,11 +2178,145 @@ export default function DashboardPage() {
 
             {/* Pipeline Footer Note */}
             <p className="text-[11px] text-center text-slate-500">
-              Shortlist decisions are saved locally and reflected in candidate reports. Evaluated by InterviewIQ Gemini AI Engine.
+              Shortlist decisions & notes persist in local candidate profiles and sync with candidate view. Evaluated by Adaptive InterviewIQ Gemini AI Engine.
             </p>
           </div>
         );
       })()}
+
+      {/* ========================================================================= */}
+      {/* TAB 6: RECRUITER COMPANY HIRING ANALYTICS                                 */}
+      {/* ========================================================================= */}
+      {activeTab === "analytics" && isRecruiter && (
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="relative rounded-3xl border border-violet-500/20 bg-gradient-to-r from-[#0d0e24]/95 via-[#0b0c21]/95 to-[#070814]/95 backdrop-blur-2xl p-6 sm:p-8 shadow-2xl overflow-hidden">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="space-y-2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide bg-violet-950/80 text-violet-300 border border-violet-700/40">
+                  <BarChart3 className="h-3.5 w-3.5 text-violet-400" />
+                  TechCorp Global · Hiring Intelligence
+                </span>
+                <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
+                  Company-Wide Talent Acquisition Analytics
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-300 max-w-xl">
+                  Aggregated performance metrics, track calibrations, and competency benchmarks across all evaluated candidates.
+                </p>
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportPipelineCSV}
+                className="gap-2 text-xs border-violet-800/60 text-violet-300 hover:bg-violet-950/50 self-start md:self-auto"
+              >
+                <Download className="h-3.5 w-3.5 text-violet-400" />
+                Export Analytics Dataset
+              </Button>
+            </div>
+          </div>
+
+          {/* Top 3 Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* 1. Track Distribution */}
+            <Card className="p-5 space-y-3">
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span className="font-semibold uppercase tracking-wider text-[10px]">Track Distribution</span>
+                <Briefcase className="h-4 w-4 text-violet-400" />
+              </div>
+              <div className="space-y-2 pt-1">
+                {recruiterStats.roleBreakdown.map((rb) => (
+                  <div key={rb.role} className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-300 font-medium capitalize">{rb.role}</span>
+                      <span className="text-indigo-400 font-mono font-bold">{rb.count} candidates ({rb.avgScore}%)</span>
+                    </div>
+                    <Progress value={(rb.count / (recruiterStats.total || 1)) * 100} size="sm" indicatorColor="indigo" />
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            {/* 2. Score Tier Distribution */}
+            <Card className="p-5 space-y-3">
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span className="font-semibold uppercase tracking-wider text-[10px]">Score Tier Distribution</span>
+                <Target className="h-4 w-4 text-emerald-400" />
+              </div>
+              <div className="space-y-2.5 pt-1 text-xs">
+                <div className="p-2.5 rounded-xl bg-emerald-950/30 border border-emerald-800/40 flex items-center justify-between">
+                  <span className="text-emerald-300 font-medium">Top Tier (≥85%)</span>
+                  <span className="text-emerald-400 font-mono font-bold">
+                    {reports.filter((r) => r.overallScore >= 85).length} candidates
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-indigo-950/30 border border-indigo-800/40 flex items-center justify-between">
+                  <span className="text-indigo-300 font-medium">Solid Hire (75–84%)</span>
+                  <span className="text-indigo-400 font-mono font-bold">
+                    {reports.filter((r) => r.overallScore >= 75 && r.overallScore < 85).length} candidates
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-amber-950/30 border border-amber-800/40 flex items-center justify-between">
+                  <span className="text-amber-300 font-medium">Needs Focus (&lt;75%)</span>
+                  <span className="text-amber-400 font-mono font-bold">
+                    {reports.filter((r) => r.overallScore < 75).length} candidates
+                  </span>
+                </div>
+              </div>
+            </Card>
+
+            {/* 3. Conversion Funnel */}
+            <Card className="p-5 space-y-3">
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span className="font-semibold uppercase tracking-wider text-[10px]">Hiring Committee Funnel</span>
+                <TrendingUp className="h-4 w-4 text-fuchsia-400" />
+              </div>
+              <div className="space-y-2.5 pt-1 text-xs">
+                <div className="flex justify-between items-center text-slate-300">
+                  <span>Evaluated Pool</span>
+                  <span className="font-mono font-bold text-white">{recruiterStats.total}</span>
+                </div>
+                <Progress value={100} size="sm" indicatorColor="indigo" />
+
+                <div className="flex justify-between items-center text-slate-300">
+                  <span>Under Active Review</span>
+                  <span className="font-mono font-bold text-amber-400">{recruiterStats.underReview}</span>
+                </div>
+                <Progress value={(recruiterStats.underReview / (recruiterStats.total || 1)) * 100} size="sm" indicatorColor="amber" />
+
+                <div className="flex justify-between items-center text-slate-300">
+                  <span>Shortlisted for Round 2</span>
+                  <span className="font-mono font-bold text-emerald-400">{recruiterStats.shortlisted} ({recruiterStats.shortlistRate}%)</span>
+                </div>
+                <Progress value={recruiterStats.shortlistRate} size="sm" indicatorColor="emerald" />
+              </div>
+            </Card>
+          </div>
+
+          {/* Collective Competencies Across All Candidates */}
+          <Card className="p-6">
+            <CardHeader className="p-0 pb-4">
+              <CardTitle>Collective Technical Competency Benchmarks</CardTitle>
+              <CardDescription>
+                Aggregated category scores across all {reports.length} candidate technical interviews:
+              </CardDescription>
+            </CardHeader>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {analytics.competencies.map((c) => (
+                <div key={c.category} className="p-3.5 rounded-xl border border-[#1e2d4f] bg-[#070b16] space-y-2">
+                  <div className="flex justify-between text-xs">
+                    <span className="font-bold text-white">{c.category}</span>
+                    <span className="font-mono font-bold text-indigo-400">{c.avgScore}% • {c.level}</span>
+                  </div>
+                  <Progress value={c.avgScore} size="sm" indicatorColor={c.avgScore >= 85 ? "emerald" : c.avgScore >= 75 ? "indigo" : "amber"} />
+                  <p className="text-[10px] text-slate-400">Tested across {c.count} candidate responses</p>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
