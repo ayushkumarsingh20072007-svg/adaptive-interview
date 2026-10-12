@@ -14,16 +14,20 @@ const STORAGE_KEYS = {
   COMPLETED_REPORTS: "interviewiq_evaluation_reports",
 };
 
-export function getStoredSetup(userId?: string | null): CandidateSetup {
-  if (typeof window === "undefined") return SAMPLE_CANDIDATE;
+export function getStoredSetup(userId?: string | null): CandidateSetup | null {
+  if (typeof window === "undefined") return null;
   try {
     const key = userId ? `${STORAGE_KEYS.SETUP}_${userId}` : STORAGE_KEYS.SETUP;
-    const raw = localStorage.getItem(key) || (!userId ? localStorage.getItem(STORAGE_KEYS.SETUP) : null);
+    const raw = localStorage.getItem(key);
     if (raw) return JSON.parse(raw);
+    if (!userId) {
+      const fallbackRaw = localStorage.getItem(STORAGE_KEYS.SETUP);
+      if (fallbackRaw) return JSON.parse(fallbackRaw);
+    }
   } catch (err) {
     console.error("Failed to load candidate setup from storage", err);
   }
-  return SAMPLE_CANDIDATE;
+  return null;
 }
 
 export function saveStoredSetup(setup: CandidateSetup): void {

@@ -115,18 +115,18 @@ export default function SignupPage() {
         </div>
 
         {/* Card Form */}
-        <Card className="border-[#1e2d4f] bg-[#0c1222] shadow-2xl shadow-indigo-950/40">
-          <CardContent className="pt-6 space-y-4">
+        <Card className="rounded-2xl border border-slate-800/80 bg-[#0c1427]/95 shadow-xl p-6 sm:p-7">
+          <CardContent className="p-0 space-y-4">
             {error && (
-              <div className="rounded-lg border border-rose-800/70 bg-rose-950/30 p-3 text-xs text-rose-300 flex items-start gap-2.5">
+              <div className="rounded-xl border border-rose-800/70 bg-rose-950/30 p-3.5 text-xs text-rose-300 flex items-start gap-2.5">
                 <AlertCircle className="h-4 w-4 shrink-0 text-rose-400 mt-0.5" />
                 <p>{error}</p>
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-3.5">
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="name" required>
+                <Label htmlFor="name" required className="text-xs font-semibold text-slate-300">
                   Full Name
                 </Label>
                 <div className="relative">
@@ -138,14 +138,14 @@ export default function SignupPage() {
                     onChange={(e) => setName(e.target.value)}
                     required
                     autoComplete="name"
-                    className="pl-9"
+                    className="pl-9 h-11 rounded-xl border-slate-700/80 bg-[#080d19] text-xs sm:text-sm"
                   />
-                  <User className="absolute left-3 top-3 h-4 w-4 text-slate-500 pointer-events-none" />
+                  <User className="absolute left-3 top-3.5 h-4 w-4 text-slate-500 pointer-events-none" />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="email" required>
+                <Label htmlFor="email" required className="text-xs font-semibold text-slate-300">
                   Email Address
                 </Label>
                 <div className="relative">
@@ -157,14 +157,14 @@ export default function SignupPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     autoComplete="email"
-                    className="pl-9"
+                    className="pl-9 h-11 rounded-xl border-slate-700/80 bg-[#080d19] text-xs sm:text-sm"
                   />
-                  <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-500 pointer-events-none" />
+                  <Mail className="absolute left-3 top-3.5 h-4 w-4 text-slate-500 pointer-events-none" />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="password" required>
+                <Label htmlFor="password" required className="text-xs font-semibold text-slate-300">
                   Password
                 </Label>
                 <div className="relative">
@@ -176,15 +176,15 @@ export default function SignupPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     autoComplete="new-password"
-                    className="pl-9"
+                    className="pl-9 h-11 rounded-xl border-slate-700/80 bg-[#080d19] text-xs sm:text-sm"
                   />
-                  <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-500 pointer-events-none" />
+                  <Lock className="absolute left-3 top-3.5 h-4 w-4 text-slate-500 pointer-events-none" />
                 </div>
                 <p className="text-[11px] text-slate-400">Must include both letters and numbers</p>
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="confirmPassword" required>
+                <Label htmlFor="confirmPassword" required className="text-xs font-semibold text-slate-300">
                   Confirm Password
                 </Label>
                 <div className="relative">
@@ -196,15 +196,15 @@ export default function SignupPage() {
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
                     autoComplete="new-password"
-                    className="pl-9"
+                    className="pl-9 h-11 rounded-xl border-slate-700/80 bg-[#080d19] text-xs sm:text-sm"
                   />
-                  <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-500 pointer-events-none" />
+                  <Lock className="absolute left-3 top-3.5 h-4 w-4 text-slate-500 pointer-events-none" />
                 </div>
               </div>
 
               <Button
                 type="submit"
-                className="w-full gap-2 justify-center bg-violet-600 hover:bg-violet-500 h-10 mt-3 text-white"
+                className="w-full h-11 rounded-xl gap-2 justify-center bg-gradient-to-r from-violet-600 to-violet-500 hover:from-violet-500 hover:to-violet-400 text-white font-bold shadow-md shadow-violet-600/25 mt-3"
                 isLoading={isSubmitting}
               >
                 Create Account
@@ -213,7 +213,7 @@ export default function SignupPage() {
             </form>
 
             {/* Alternative: Guest Demo Flow */}
-            <div className="pt-3 border-t border-[#1a2642] space-y-3">
+            <div className="pt-4 border-t border-slate-800/80 space-y-3">
               <div className="text-center">
                 <span className="text-xs text-slate-400">
                   Just exploring the demo?
@@ -222,7 +222,7 @@ export default function SignupPage() {
               <Link href="/setup" className="block">
                 <Button
                   variant="secondary"
-                  className="w-full justify-center text-xs h-9 border-[#1e2d4f] hover:border-violet-600/50"
+                  className="w-full h-10 rounded-xl justify-center text-xs border-slate-700/80 hover:bg-slate-800 font-semibold"
                 >
                   Start Guest Interview Directly
                 </Button>
@@ -240,12 +240,12 @@ export default function SignupPage() {
         </div>
 
         {/* Security Assurances */}
-        <div className="rounded-lg border border-[#1a2642] bg-[#0c1222]/60 p-3 text-[11px] text-slate-400 space-y-1.5">
-          <div className="flex items-center gap-1.5 text-slate-300 font-medium">
-            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+        <div className="rounded-2xl border border-slate-800/80 bg-[#080d19]/80 p-4 text-xs text-slate-400 space-y-1.5">
+          <div className="flex items-center gap-2 text-slate-300 font-semibold">
+            <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
             <span>Candidate Data Privacy Assurances</span>
           </div>
-          <p>Passwords are never stored in plaintext. Sessions use secure HTTP-only cookies. No personal resumes are retained without explicit candidate consent.</p>
+          <p className="text-[11px] leading-relaxed">Passwords are never stored in plaintext. Sessions use secure HTTP-only cookies. No personal resumes are retained without explicit candidate consent.</p>
         </div>
       </div>
     </div>

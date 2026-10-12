@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { callGemini, parseGeminiJson } from "@/lib/gemini";
 import { Question, AnswerFeedback } from "@/lib/types";
 import { resolveRequestUser } from "@/lib/resolve-user";
+import { evaluateAnswer } from "@/lib/interview-engine";
 
 export async function POST(req: NextRequest) {
   try {
@@ -37,15 +38,20 @@ Respond ONLY with valid JSON (no markdown, no code fences):
   "adaptiveNote": "<1-2 sentence note about how the next question will adapt>"
 }`;
 
-    console.log(`[🤖 Gemini AI] Evaluating answer for "${candidateName}" on "${question.category}"...`);
-    const raw = await callGemini(prompt);
-    const feedback = parseGeminiJson<AnswerFeedback>(raw);
-    feedback.score = Math.min(100, Math.max(0, Math.round(feedback.score)));
-    console.log(`[🤖 Gemini AI] Evaluation complete! Score: ${feedback.score}/100 | Strengths: [${feedback.strengths.join(", ")}]`);
-
-    return NextResponse.json({ feedback });
+    try {
+      console.log(`[🤖 Gemini AI] Evaluating answer for "${candidateName}" on "${question.category}"...`);
+      const raw = await callGemini(prompt);
+      const feedback = parseGeminiJson<AnswerFeedback>(raw);
+      feedback.score = Math.min(100, Math.max(0, Math.round(feedback.score)));
+      console.log(`[🤖 Gemini AI] Evaluation complete! Score: ${feedback.score}/100 | Strengths: [${feedback.strengths.join(", ")}]`);
+      return NextResponse.json({ feedback });
+    } catch (aiErr) {
+      console.warn("[🤖 Gemini AI] Live answer evaluation failed (quota/rate-limit/network). Using calibrated rubric evaluation:", aiErr);
+      const feedback = evaluateAnswer(question, answerText);
+      return NextResponse.json({ feedback, fallbackUsed: true });
+    }
   } catch (err) {
-    console.error("[evaluate-answer] Error:", err);
+    console.error("[evaluate-answer] Internal Route Error:", err);
     return NextResponse.json(
       { error: "Failed to evaluate answer." },
       { status: 500 }

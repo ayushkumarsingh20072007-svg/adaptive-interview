@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { callGemini, parseGeminiJson } from "@/lib/gemini";
 import { Question, AnswerRecord, CandidateSetup } from "@/lib/types";
 import { resolveRequestUser } from "@/lib/resolve-user";
+import { QUESTION_BANK } from "@/lib/mock-data";
 
 export async function POST(req: NextRequest) {
   try {
@@ -53,14 +54,25 @@ Respond ONLY with valid JSON (no markdown, no code fences):
   "expectedKeywords": ["<kw1>", "<kw2>", "<kw3>"]
 }`;
 
-    console.log(`[🤖 Gemini AI] Generating adaptive follow-up (previous score: ${lastScore}/100)...`);
-    const raw = await callGemini(prompt);
-    const question = parseGeminiJson<Question>(raw);
-    console.log(`[🤖 Gemini AI] Adaptive question ready: "${question.questionText.slice(0, 90)}..."`);
-
-    return NextResponse.json({ question });
+    try {
+      console.log(`[🤖 Gemini AI] Generating adaptive follow-up (previous score: ${lastScore}/100)...`);
+      const raw = await callGemini(prompt);
+      const question = parseGeminiJson<Question>(raw);
+      console.log(`[🤖 Gemini AI] Adaptive question ready: "${question.questionText.slice(0, 90)}..."`);
+      return NextResponse.json({ question });
+    } catch (aiErr) {
+      console.warn("[🤖 Gemini AI] Adaptive question AI call failed (quota/rate-limit/network). Using calibrated fallback question:", aiErr);
+      const roleBank = QUESTION_BANK[setup.targetRole] || QUESTION_BANK.fullstack;
+      const unusedQuestion = roleBank.find((q) => !questionsAsked.includes(q.questionText) && q.id !== lastQuestion.id) || roleBank[0];
+      const fallbackQuestion: Question = {
+        ...unusedQuestion,
+        id: `fb-q-${Date.now()}`,
+        difficulty: lastScore >= 85 ? "advanced" : lastScore < 65 ? "beginner" : "intermediate",
+      };
+      return NextResponse.json({ question: fallbackQuestion, fallbackUsed: true });
+    }
   } catch (err) {
-    console.error("[next-question] Error:", err);
+    console.error("[next-question] Internal Route Error:", err);
     return NextResponse.json(
       { error: "Failed to generate next question." },
       { status: 500 }

@@ -62,7 +62,7 @@ export default function CandidateSetupPage() {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
-    const existing = getStoredSetup();
+    const existing = getStoredSetup(user?.id);
     if (!existing) return;
     requestAnimationFrame(() => {
       if (existing.candidateName) {
@@ -229,6 +229,12 @@ export default function CandidateSetupPage() {
     e.preventDefault();
 
     const newErrors: Record<string, string> = {};
+    if (!user) {
+      newErrors.auth = "Account required. Please sign in or register before launching an interview.";
+    }
+    if (!resumeFile) {
+      newErrors.resume = "Resume is required. Please upload your resume (PDF, DOCX, TXT) or select a sample resume before proceeding.";
+    }
     if (!targetRole) newErrors.targetRole = "Please select a target engineering role.";
     if (!experienceLevel) newErrors.experienceLevel = "Please specify your experience level.";
     if (!interviewFocus) newErrors.interviewFocus = "Please choose an interview focus.";
@@ -258,10 +264,8 @@ export default function CandidateSetupPage() {
 
     saveStoredSetup(setupData);
 
-    // Smooth navigation to dashboard
-    setTimeout(() => {
-      router.push("/dashboard");
-    }, 250);
+    // Immediate instant navigation to dashboard
+    window.location.assign("/dashboard");
   }
 
   const roleOptions: { role: TargetRole; desc: string }[] = [
@@ -276,21 +280,21 @@ export default function CandidateSetupPage() {
   return (
     <div className="flex flex-col gap-6 max-w-4xl mx-auto w-full py-4">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-[#1e2d4f] pb-4">
+      <div className="p-6 sm:p-7 rounded-2xl border border-slate-800/80 bg-gradient-to-r from-[#0d162c]/90 via-[#0a1122]/90 to-[#0e172e]/90 shadow-md backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Badge variant="indigo">Step 1 of Setup</Badge>
-            <span className="text-xs text-slate-400">Candidate Calibration</span>
+          <div className="flex items-center gap-2 mb-1.5">
+            <Badge variant="indigo" className="text-xs py-0.5 px-2 font-medium">Step 1 of Setup</Badge>
+            <span className="text-xs text-slate-400 font-mono">Candidate Calibration</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white">
+          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
             Configure Your Interview Profile
           </h1>
-          <p className="text-sm text-slate-400 mt-0.5">
-            Personalize the interview engine for your target role, seniority level, and focus area.
+          <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-xl">
+            Personalize the interview engine for your target role, seniority level, and upload your resume for adaptive questioning.
           </p>
         </div>
         <Link href="/">
-          <Button variant="ghost" size="sm" className="gap-1.5">
+          <Button variant="ghost" size="sm" className="gap-2 h-9 px-3.5 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800/60">
             <ArrowLeft className="h-4 w-4" />
             <span className="hidden sm:inline">Overview</span>
           </Button>
@@ -299,15 +303,15 @@ export default function CandidateSetupPage() {
 
       {/* Auth or Guest Mode Notification Banner */}
       {user ? (
-        <div className="rounded-lg border border-emerald-800/60 bg-emerald-950/20 px-4 py-2.5 text-xs text-emerald-300 flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+        <div className="rounded-2xl border border-emerald-800/60 bg-emerald-950/25 px-5 py-3.5 text-xs text-emerald-300 flex items-center justify-between flex-wrap gap-3 shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
             <span>
               Signed in as <strong className="text-white">{user.name}</strong> ({user.email}). Your interview results will link to your account.
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant="success">Authenticated</Badge>
+            <Badge variant="success" className="text-xs py-0.5 px-2">Authenticated</Badge>
             <Button
               type="button"
               variant="ghost"
@@ -316,25 +320,34 @@ export default function CandidateSetupPage() {
                 await logout();
                 router.refresh();
               }}
-              className="text-xs text-rose-300 hover:text-white hover:bg-rose-950/40 gap-1 h-7 px-2"
+              className="text-xs text-rose-300 hover:text-white hover:bg-rose-950/40 gap-1.5 h-7.5 px-2.5 rounded-lg"
               title="Log out of this account"
             >
-              <LogOut className="h-3 w-3 text-rose-400" />
+              <LogOut className="h-3.5 w-3.5 text-rose-400" />
               <span>Log Out</span>
             </Button>
           </div>
         </div>
       ) : (
-        <div className="rounded-lg border border-[#1e2d4f] bg-[#0c1222]/80 px-4 py-2.5 text-xs text-slate-300 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-amber-400/80" />
-            <span>
-              <strong>Guest / Demo Mode:</strong> Running interview locally in browser. No login required.
+        <div className="rounded-2xl border border-amber-800/60 bg-amber-950/30 px-5 py-4 text-xs text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-amber-400 shrink-0" />
+            <span className="leading-relaxed">
+              <strong>Authentication & Resume Required:</strong> Please sign in or register and upload your resume to calibrate adaptive questions.
             </span>
           </div>
-          <Link href="/login" className="text-indigo-400 hover:text-indigo-300 font-medium underline underline-offset-4">
-            Sign In to save permanently
-          </Link>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link href="/login">
+              <Button size="sm" variant="outline" className="text-xs h-8 px-3.5 rounded-xl border-amber-700/60 text-amber-200 hover:bg-amber-900/40">
+                Sign In
+              </Button>
+            </Link>
+            <Link href="/signup">
+              <Button size="sm" className="text-xs h-8 px-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium">
+                Register
+              </Button>
+            </Link>
+          </div>
         </div>
       )}
 
@@ -343,49 +356,50 @@ export default function CandidateSetupPage() {
         {/* Left Column: Form Controls */}
         <div className="lg:col-span-2 space-y-6">
           {/* Card 1: Identity & Resume */}
-          <Card>
-            <CardHeader className="pb-3">
+          <Card className="rounded-2xl border border-slate-800/80 bg-[#0c1427]/90 shadow-md overflow-hidden">
+            <CardHeader className="p-6 border-b border-slate-800/80 space-y-1.5">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base">1. Candidate Information & Resume</CardTitle>
+                <CardTitle className="text-base sm:text-lg">1. Candidate Information & Resume</CardTitle>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={handleUseSampleResume}
-                  className="gap-1.5 text-xs text-indigo-300 border-indigo-800/60 hover:bg-indigo-950/40"
+                  className="gap-1.5 text-xs h-8 px-3 rounded-xl text-indigo-300 border-indigo-800/60 hover:bg-indigo-950/50"
                 >
                   <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
                   Use Sample Resume
                 </Button>
               </div>
-              <CardDescription>
+              <CardDescription className="text-xs">
                 Provide an optional name and ingest your resume to calibrate question difficulty.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="p-6 sm:p-7 space-y-5">
               <div>
-                <Label htmlFor="candidateName">Candidate Name (Optional)</Label>
+                <Label htmlFor="candidateName" className="font-semibold text-xs uppercase tracking-wider text-slate-300">Candidate Name (Optional)</Label>
                 <Input
                   id="candidateName"
                   placeholder="e.g. Alex Rivera"
                   value={candidateName}
                   onChange={(e) => setCandidateName(e.target.value)}
+                  className="mt-1.5 h-10 rounded-xl bg-[#070c18] border-slate-800 text-white placeholder-slate-500"
                 />
               </div>
 
               {/* Resume Ingest Area */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <Label className="mb-0">Resume Ingestion (.pdf, .docx, .txt)</Label>
+                  <Label className="mb-0 font-semibold text-xs uppercase tracking-wider text-slate-300">Resume Ingestion (.pdf, .docx, .txt)</Label>
                   {resumeFile && (
-                    <span className="text-[11px] text-slate-400">
+                    <span className="text-xs text-slate-400">
                       {isResumeVerified ? (
                         <span className="text-emerald-400 flex items-center gap-1 font-medium">
-                          <CheckCircle2 className="h-3 w-3" /> Verified by you
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Verified by you
                         </span>
                       ) : (
                         <span className="text-amber-400/90 flex items-center gap-1 font-medium">
-                          <AlertCircle className="h-3 w-3" /> Needs verification
+                          <AlertCircle className="h-3.5 w-3.5" /> Needs verification
                         </span>
                       )}
                     </span>
@@ -402,11 +416,11 @@ export default function CandidateSetupPage() {
                 />
 
                 {resumeFile ? (
-                  <div className="rounded-xl border border-indigo-800/70 bg-gradient-to-br from-[#0c1222] via-[#0f172a] to-[#141b36] p-4 shadow-lg shadow-indigo-950/20">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-start gap-3 min-w-0">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-indigo-950 border border-indigo-700/50 text-indigo-300">
-                          <FileCheck className="h-5 w-5 text-indigo-400" />
+                  <div className="rounded-2xl border border-indigo-600/40 bg-gradient-to-br from-[#0c1326] via-[#0f172a] to-[#141d38] p-5 shadow-lg shadow-indigo-950/30">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-start gap-3.5 min-w-0">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-950 border border-indigo-700/60 text-indigo-300 shadow-inner">
+                          <FileCheck className="h-6 w-6 text-indigo-400" />
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
@@ -414,16 +428,16 @@ export default function CandidateSetupPage() {
                               {resumeFile.name}
                             </p>
                             {resumeFile.isSample ? (
-                              <Badge variant="indigo" className="text-[10px] py-0 px-1.5">
+                              <Badge variant="indigo" className="text-[10px] py-0.5 px-2">
                                 Sample Profile
                               </Badge>
                             ) : (
-                              <Badge variant="outline" className="text-[10px] py-0 px-1.5 text-slate-300 border-slate-700">
+                              <Badge variant="outline" className="text-[10px] py-0.5 px-2 text-slate-300 border-slate-700">
                                 Uploaded File
                               </Badge>
                             )}
                           </div>
-                          <p className="text-xs text-indigo-300/80 font-mono mt-0.5">
+                          <p className="text-xs text-indigo-300/80 font-mono mt-1">
                             {resumeFile.size} • {resumeFile.name.endsWith(".pdf") ? "PDF Document" : resumeFile.name.endsWith(".docx") ? "Word Document" : "Plain Text"}
                           </p>
                         </div>
@@ -436,7 +450,7 @@ export default function CandidateSetupPage() {
                           variant="outline"
                           size="sm"
                           onClick={() => setIsPreviewOpen(true)}
-                          className="gap-1.5 text-xs text-indigo-300 border-indigo-700/60 bg-indigo-950/50 hover:bg-indigo-900/60 hover:text-white"
+                          className="gap-1.5 text-xs h-8.5 px-3 rounded-xl text-indigo-300 border-indigo-700/60 bg-indigo-950/50 hover:bg-indigo-900/60 hover:text-white"
                         >
                           <Eye className="h-3.5 w-3.5" />
                           Verify & Preview
@@ -447,7 +461,7 @@ export default function CandidateSetupPage() {
                           size="sm"
                           onClick={handleReplaceResume}
                           title="Upload different resume"
-                          className="gap-1 text-xs text-slate-300 hover:text-white hover:bg-slate-800/60"
+                          className="gap-1 text-xs h-8.5 px-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800/60"
                         >
                           <RefreshCw className="h-3.5 w-3.5" />
                           <span className="hidden sm:inline">Change</span>
@@ -458,7 +472,7 @@ export default function CandidateSetupPage() {
                           size="icon"
                           onClick={handleRemoveResume}
                           aria-label="Remove resume"
-                          className="text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 h-8 w-8"
+                          className="text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 h-8.5 w-8.5 rounded-xl"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -466,9 +480,9 @@ export default function CandidateSetupPage() {
                     </div>
 
                     {/* Verification Prompt Bar */}
-                    <div className="mt-3 pt-3 border-t border-[#1e2d4f]/60 flex items-center justify-between text-xs text-slate-400">
-                      <div className="flex items-center gap-1.5">
-                        <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                    <div className="mt-3.5 pt-3.5 border-t border-[#1e2d4f]/60 flex items-center justify-between text-xs text-slate-400">
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-indigo-400 animate-pulse" />
                         <span>
                           {isResumeVerified
                             ? "Document verified: Ready for candidate calibration."
@@ -490,28 +504,28 @@ export default function CandidateSetupPage() {
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
                     onClick={() => fileInputRef.current?.click()}
-                    className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center cursor-pointer transition-all duration-200 ${
+                    className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 sm:p-10 text-center cursor-pointer transition-all duration-200 ${
                       isDragging
                         ? "border-indigo-400 bg-indigo-950/60 ring-4 ring-indigo-500/20 scale-[1.01]"
                         : "border-[#22304e] bg-[#070b14]/50 hover:border-indigo-500/60 hover:bg-[#0c1222]/60"
                     }`}
                   >
-                    <div className={`flex h-12 w-12 items-center justify-center rounded-full transition-transform ${
-                      isDragging ? "bg-indigo-600 text-white scale-110" : "bg-indigo-950/80 text-indigo-400"
-                    } mb-3`}>
-                      <UploadCloud className="h-6 w-6" />
+                    <div className={`flex h-14 w-14 items-center justify-center rounded-2xl transition-transform ${
+                      isDragging ? "bg-indigo-600 text-white scale-110" : "bg-indigo-950/80 border border-indigo-800/50 text-indigo-400"
+                    } mb-3.5`}>
+                      <UploadCloud className="h-7 w-7" />
                     </div>
                     <p className="text-sm font-semibold text-slate-200">
                       {isDragging ? "Release to drop and inspect resume" : "Click to browse or drag and drop your resume"}
                     </p>
-                    <p className="text-xs text-slate-400 mt-1 max-w-sm">
+                    <p className="text-xs text-slate-400 mt-1.5 max-w-sm">
                       Supports PDF, DOCX, or TXT up to 10MB. You can preview and verify the document before starting.
                     </p>
                   </div>
                 )}
 
                 {errors.resume && (
-                  <p className="text-xs text-rose-400 mt-1.5 flex items-center gap-1">
+                  <p className="text-xs text-rose-400 mt-2 flex items-center gap-1.5">
                     <AlertCircle className="h-3.5 w-3.5" />
                     {errors.resume}
                   </p>
@@ -521,15 +535,15 @@ export default function CandidateSetupPage() {
           </Card>
 
           {/* Card 2: Target Role */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">2. Target Engineering Role</CardTitle>
-              <CardDescription>
+          <Card className="rounded-2xl border border-slate-800/80 bg-[#0c1427]/90 shadow-md overflow-hidden">
+            <CardHeader className="p-6 border-b border-slate-800/80">
+              <CardTitle className="text-base sm:text-lg">2. Target Engineering Role</CardTitle>
+              <CardDescription className="text-xs mt-0.5">
                 Select the domain role you want to practice for.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <CardContent className="p-6 sm:p-7">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {roleOptions.map((opt) => {
                   const isSelected = targetRole === opt.role;
                   return (
@@ -537,16 +551,16 @@ export default function CandidateSetupPage() {
                       key={opt.role}
                       type="button"
                       onClick={() => setTargetRole(opt.role)}
-                      className={`text-left p-3 rounded-lg border transition-all text-xs ${
+                      className={`text-left p-3.5 sm:p-4 rounded-xl border transition-all text-xs ${
                         isSelected
-                          ? "border-indigo-500 bg-indigo-950/40 text-white ring-1 ring-indigo-500"
+                          ? "border-indigo-500 bg-indigo-950/50 text-white ring-1 ring-indigo-500/60 shadow-sm"
                           : "border-[#1e2d4f] bg-[#0c1222] text-slate-300 hover:border-[#2b3e6b] hover:bg-[#141e34]"
                       }`}
                     >
                       <div className="font-semibold text-sm text-slate-100">
                         {ROLE_LABELS[opt.role]}
                       </div>
-                      <div className="text-[11px] text-slate-400 mt-1">{opt.desc}</div>
+                      <div className="text-xs text-slate-400 mt-1">{opt.desc}</div>
                     </button>
                   );
                 })}
@@ -555,24 +569,24 @@ export default function CandidateSetupPage() {
           </Card>
 
           {/* Card 3: Calibration Parameters */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">3. Calibration Parameters</CardTitle>
-              <CardDescription>
+          <Card className="rounded-2xl border border-slate-800/80 bg-[#0c1427]/90 shadow-md overflow-hidden">
+            <CardHeader className="p-6 border-b border-slate-800/80">
+              <CardTitle className="text-base sm:text-lg">3. Calibration Parameters</CardTitle>
+              <CardDescription className="text-xs mt-0.5">
                 Customize question depth, evaluation focus, and interview length.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="p-6 sm:p-7 space-y-5">
               {/* Experience level */}
               <div>
-                <Label>Experience Level</Label>
-                <div className="grid grid-cols-3 gap-2">
+                <Label className="font-semibold text-xs uppercase tracking-wider text-slate-300">Experience Level</Label>
+                <div className="grid grid-cols-3 gap-2.5 mt-1.5">
                   {(["beginner", "intermediate", "advanced"] as ExperienceLevel[]).map((lvl) => (
                     <button
                       key={lvl}
                       type="button"
                       onClick={() => setExperienceLevel(lvl)}
-                      className={`py-2 px-3 rounded-lg border text-xs capitalize transition-colors ${
+                      className={`py-2.5 px-3 rounded-xl border text-xs capitalize transition-colors ${
                         experienceLevel === lvl
                           ? "border-indigo-500 bg-indigo-950/50 text-white font-semibold"
                           : "border-[#1e2d4f] bg-[#0c1222] text-slate-300 hover:bg-[#141e34]"
@@ -586,8 +600,8 @@ export default function CandidateSetupPage() {
 
               {/* Focus */}
               <div>
-                <Label>Interview Focus</Label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <Label className="font-semibold text-xs uppercase tracking-wider text-slate-300">Interview Focus</Label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-1.5">
                   {[
                     { id: "dsa", label: "DSA" },
                     { id: "core-concepts", label: "Core Concepts" },
@@ -598,7 +612,7 @@ export default function CandidateSetupPage() {
                       key={f.id}
                       type="button"
                       onClick={() => setInterviewFocus(f.id as InterviewFocus)}
-                      className={`py-2 px-2.5 rounded-lg border text-xs transition-colors text-center ${
+                      className={`py-2.5 px-3 rounded-xl border text-xs transition-colors text-center ${
                         interviewFocus === f.id
                           ? "border-indigo-500 bg-indigo-950/50 text-white font-semibold"
                           : "border-[#1e2d4f] bg-[#0c1222] text-slate-300 hover:bg-[#141e34]"
@@ -612,14 +626,14 @@ export default function CandidateSetupPage() {
 
               {/* Duration */}
               <div>
-                <Label>Interview Length</Label>
-                <div className="grid grid-cols-3 gap-2">
+                <Label className="font-semibold text-xs uppercase tracking-wider text-slate-300">Interview Length</Label>
+                <div className="grid grid-cols-3 gap-2.5 mt-1.5">
                   {[10, 20, 30].map((mins) => (
                     <button
                       key={mins}
                       type="button"
                       onClick={() => setInterviewLength(mins)}
-                      className={`py-2 px-3 rounded-lg border text-xs flex items-center justify-center gap-1.5 transition-colors ${
+                      className={`py-2.5 px-3 rounded-xl border text-xs flex items-center justify-center gap-1.5 transition-colors ${
                         interviewLength === mins
                           ? "border-indigo-500 bg-indigo-950/50 text-white font-semibold"
                           : "border-[#1e2d4f] bg-[#0c1222] text-slate-300 hover:bg-[#141e34]"
@@ -637,79 +651,96 @@ export default function CandidateSetupPage() {
 
         {/* Right Column: Live Configuration Summary Card */}
         <div className="space-y-4">
-          <Card className="sticky top-20 border-indigo-900/60 bg-[#10182b]">
-            <CardHeader className="pb-3 border-b border-[#1a2642]">
+          <Card className="sticky top-20 rounded-2xl border border-indigo-900/60 bg-gradient-to-br from-[#0f172e] to-[#0a1020] shadow-xl shadow-indigo-950/30 overflow-hidden">
+            <CardHeader className="p-5 sm:p-6 border-b border-[#1a2642]">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-sm">Session Summary</CardTitle>
-                <Badge variant="indigo">Live Preview</Badge>
+                <CardTitle className="text-sm font-bold">Session Summary</CardTitle>
+                <Badge variant="indigo" className="text-xs py-0.5 px-2">Live Preview</Badge>
               </div>
-              <CardDescription>
+              <CardDescription className="text-xs mt-0.5">
                 Verify your calibration before proceeding to the candidate dashboard.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3.5 text-xs pt-4">
-              <div className="flex justify-between items-center py-1 border-b border-[#1a2642]/60">
+            <CardContent className="p-5 sm:p-6 space-y-3.5 text-xs">
+              <div className="flex justify-between items-center py-1.5 border-b border-[#1a2642]/60">
                 <span className="text-slate-400">Candidate:</span>
                 <span className="font-semibold text-white">
                   {candidateName.trim() || "Alex Rivera (Demo)"}
                 </span>
               </div>
 
-              <div className="flex justify-between items-center py-1 border-b border-[#1a2642]/60">
+              <div className="flex justify-between items-center py-1.5 border-b border-[#1a2642]/60">
                 <span className="text-slate-400">Target Role:</span>
                 <span className="font-semibold text-indigo-300">
                   {ROLE_LABELS[targetRole]}
                 </span>
               </div>
 
-              <div className="flex justify-between items-center py-1 border-b border-[#1a2642]/60">
+              <div className="flex justify-between items-center py-1.5 border-b border-[#1a2642]/60">
                 <span className="text-slate-400">Seniority Level:</span>
                 <span className="capitalize text-slate-200">{experienceLevel}</span>
               </div>
 
-              <div className="flex justify-between items-center py-1 border-b border-[#1a2642]/60">
+              <div className="flex justify-between items-center py-1.5 border-b border-[#1a2642]/60">
                 <span className="text-slate-400">Evaluation Focus:</span>
                 <span className="capitalize text-slate-200">
                   {interviewFocus.replace("-", " ")}
                 </span>
               </div>
 
-              <div className="flex justify-between items-center py-1 border-b border-[#1a2642]/60">
+              <div className="flex justify-between items-center py-1.5 border-b border-[#1a2642]/60">
                 <span className="text-slate-400">Estimated Duration:</span>
                 <span className="text-slate-200">{interviewLength} Minutes</span>
               </div>
 
-              <div className="flex justify-between items-center py-1 border-b border-[#1a2642]/60">
+              <div className="flex justify-between items-center py-1.5 border-b border-[#1a2642]/60">
                 <span className="text-slate-400">Resume Status:</span>
-                <span className={resumeFile ? "text-emerald-400" : "text-amber-400"}>
+                <span className={resumeFile ? "text-emerald-400 font-medium" : "text-amber-400 font-medium"}>
                   {resumeFile ? "Calibrated" : "Not Provided"}
                 </span>
               </div>
 
               <div className="pt-2">
-                <span className="text-[11px] text-slate-400 block mb-1.5 font-medium">
+                <span className="text-xs text-slate-400 block mb-2 font-medium">
                   Associated Competencies:
                 </span>
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-1.5">
                   {(ROLE_SKILLS[targetRole] || []).slice(0, 4).map((sk) => (
-                    <Badge key={sk} variant="default" className="text-[10px] py-0 px-1.5">
+                    <Badge key={sk} variant="default" className="text-[10px] py-0.5 px-2">
                       {sk}
                     </Badge>
                   ))}
                 </div>
               </div>
             </CardContent>
-            <CardFooter className="pt-2 flex flex-col gap-2">
+            <CardFooter className="p-5 sm:p-6 pt-3 border-t border-[#1a2642] flex flex-col gap-3">
+              {errors.auth && (
+                <div className="w-full p-3 rounded-xl border border-amber-800/60 bg-amber-950/40 text-amber-200 text-xs flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-1.5">
+                    <AlertCircle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                    {errors.auth}
+                  </span>
+                  <Link href="/login" className="font-semibold underline shrink-0 hover:text-white">
+                    Sign In
+                  </Link>
+                </div>
+              )}
+              {errors.resume && (
+                <div className="w-full p-3 rounded-xl border border-rose-800/60 bg-rose-950/40 text-rose-200 text-xs flex items-center gap-1.5">
+                  <AlertCircle className="h-3.5 w-3.5 text-rose-400 shrink-0" />
+                  {errors.resume}
+                </div>
+              )}
               <Button
                 type="submit"
                 isLoading={isSubmitting}
-                className="w-full gap-2 justify-center h-10 shadow-md shadow-indigo-950/60"
+                className="w-full gap-2 justify-center h-11.5 rounded-xl font-bold text-sm bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-lg shadow-indigo-600/30 active:scale-[0.98] transition-all"
               >
                 Proceed to Dashboard
                 <ArrowRight className="h-4 w-4" />
               </Button>
-              <p className="text-[10px] text-slate-500 text-center">
-                Setup will be saved locally and can be re-calibrated at any time.
+              <p className="text-xs text-slate-500 text-center">
+                Setup will be saved to your profile and can be re-calibrated at any time.
               </p>
             </CardFooter>
           </Card>

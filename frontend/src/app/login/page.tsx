@@ -288,15 +288,15 @@ export default function LoginPage() {
         </div>
 
         {/* Regular Custom Sign-In Form */}
-        <Card className="border-[#1e2d4f] bg-[#0c1222] shadow-2xl shadow-indigo-950/40">
-          <CardContent className="pt-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-300">Or Sign In with Custom Email:</span>
-              <span className="text-[11px] text-slate-500 font-mono">Default Demo Pass: Password123</span>
+        <Card className="rounded-2xl border border-slate-800/80 bg-[#0c1427]/95 shadow-xl p-6 sm:p-7">
+          <CardContent className="p-0 space-y-4">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="text-xs font-bold text-slate-200">Or Sign In with Custom Email:</span>
+              <span className="text-[11px] text-slate-400 font-mono bg-slate-900/80 px-2 py-0.5 rounded border border-slate-800">Demo Pass: Password123</span>
             </div>
 
             {error && (
-              <div className="rounded-lg border border-rose-800/70 bg-rose-950/30 p-3 text-xs text-rose-300 flex items-start gap-2.5">
+              <div className="rounded-xl border border-rose-800/70 bg-rose-950/30 p-3.5 text-xs text-rose-300 flex items-start gap-2.5">
                 <AlertCircle className="h-4 w-4 shrink-0 text-rose-400 mt-0.5" />
                 <p>{error}</p>
               </div>
@@ -304,7 +304,7 @@ export default function LoginPage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="email" required>
+                <Label htmlFor="email" required className="text-xs font-semibold text-slate-300">
                   Email Address
                 </Label>
                 <div className="relative">
@@ -316,15 +316,15 @@ export default function LoginPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     autoComplete="email"
-                    className="pl-9"
+                    className="pl-9 h-11 rounded-xl border-slate-700/80 bg-[#080d19] text-xs sm:text-sm"
                   />
-                  <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-500 pointer-events-none" />
+                  <Mail className="absolute left-3 top-3.5 h-4 w-4 text-slate-500 pointer-events-none" />
                 </div>
               </div>
 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="password" required>
+                  <Label htmlFor="password" required className="text-xs font-semibold text-slate-300">
                     Password
                   </Label>
                 </div>
@@ -337,15 +337,15 @@ export default function LoginPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     autoComplete="current-password"
-                    className="pl-9"
+                    className="pl-9 h-11 rounded-xl border-slate-700/80 bg-[#080d19] text-xs sm:text-sm"
                   />
-                  <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-500 pointer-events-none" />
+                  <Lock className="absolute left-3 top-3.5 h-4 w-4 text-slate-500 pointer-events-none" />
                 </div>
               </div>
 
               <Button
                 type="submit"
-                className="w-full gap-2 justify-center bg-indigo-600 hover:bg-indigo-500 h-10 mt-2"
+                className="w-full h-11 rounded-xl gap-2 justify-center bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-bold shadow-md shadow-indigo-600/25 mt-2"
                 isLoading={isSubmitting}
               >
                 Sign In
@@ -354,7 +354,7 @@ export default function LoginPage() {
             </form>
 
             {/* Alternative: Guest Demo Flow */}
-            <div className="pt-3 border-t border-[#1a2642] space-y-3">
+            <div className="pt-4 border-t border-slate-800/80 space-y-3">
               <div className="text-center">
                 <span className="text-xs text-slate-400">
                   Prefer not to create an account?
@@ -363,7 +363,7 @@ export default function LoginPage() {
               <Link href="/setup" className="block">
                 <Button
                   variant="secondary"
-                  className="w-full justify-center text-xs h-9 border-[#1e2d4f] hover:border-indigo-600/50"
+                  className="w-full h-10 rounded-xl justify-center text-xs border-slate-700/80 hover:bg-slate-800 font-semibold"
                 >
                   Continue as Guest (No Sign In)
                 </Button>

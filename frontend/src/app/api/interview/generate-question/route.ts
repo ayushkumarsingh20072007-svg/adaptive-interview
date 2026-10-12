@@ -2,17 +2,34 @@ import { NextRequest, NextResponse } from "next/server";
 import { callGemini, parseGeminiJson } from "@/lib/gemini";
 import { CandidateSetup, Question } from "@/lib/types";
 import { resolveRequestUser } from "@/lib/resolve-user";
+import { QUESTION_BANK } from "@/lib/mock-data";
 
 export async function POST(req: NextRequest) {
   try {
-    void resolveRequestUser(req);
+    const auth = await resolveRequestUser(req);
     const body = await req.json();
     const setup: CandidateSetup = body.setup;
     const previousQuestions: string[] = body.previousQuestions || [];
-    const resumeText: string = body.resumeText || "";
+    const resumeText: string = body.resumeText || setup?.resumeText || "";
 
     if (!setup) {
       return NextResponse.json({ error: "Missing candidate setup" }, { status: 400 });
+    }
+
+    const isDemo = setup.isSampleResume || setup.candidateName?.includes("Demo");
+    if (!isDemo && !auth.authenticated) {
+      return NextResponse.json(
+        { error: "Unauthorized: Sign in is required before generating interview questions." },
+        { status: 401 }
+      );
+    }
+
+    const hasResume = Boolean(resumeText.trim() || setup.resumeFileName || setup.isSampleResume);
+    if (!hasResume) {
+      return NextResponse.json(
+        { error: "Resume required: Technical question generation requires an uploaded resume or skill profile." },
+        { status: 400 }
+      );
     }
 
     const previousQList =
@@ -48,14 +65,25 @@ Respond ONLY with valid JSON (no markdown, no code fences):
   "expectedKeywords": ["<keyword1>", "<keyword2>", "<keyword3>", "<keyword4>"]
 }`;
 
-    console.log(`[🤖 Gemini AI] Generating question for ${setup.candidateName} (${setup.targetRole} - ${setup.experienceLevel})...`);
-    const raw = await callGemini(prompt);
-    const question = parseGeminiJson<Question>(raw);
-    console.log(`[🤖 Gemini AI] Question generated: "${question.questionText.slice(0, 90)}..."`);
-
-    return NextResponse.json({ question });
+    try {
+      console.log(`[🤖 Gemini AI] Generating question for ${setup.candidateName} (${setup.targetRole} - ${setup.experienceLevel})...`);
+      const raw = await callGemini(prompt);
+      const question = parseGeminiJson<Question>(raw);
+      console.log(`[🤖 Gemini AI] Question generated: "${question.questionText.slice(0, 90)}..."`);
+      return NextResponse.json({ question });
+    } catch (aiErr) {
+      console.warn("[🤖 Gemini AI] Live AI call failed (quota/rate-limit/network). Using calibrated fallback question:", aiErr);
+      const roleBank = QUESTION_BANK[setup.targetRole] || QUESTION_BANK.fullstack;
+      const unusedQuestion = roleBank.find((q) => !previousQuestions.includes(q.questionText)) || roleBank[0];
+      const fallbackQuestion: Question = {
+        ...unusedQuestion,
+        id: `fb-q-${Date.now()}`,
+        difficulty: setup.experienceLevel,
+      };
+      return NextResponse.json({ question: fallbackQuestion, fallbackUsed: true });
+    }
   } catch (err) {
-    console.error("[generate-question] Error:", err);
+    console.error("[generate-question] Internal Route Error:", err);
     return NextResponse.json(
       { error: "Failed to generate question. Please try again." },
       { status: 500 }

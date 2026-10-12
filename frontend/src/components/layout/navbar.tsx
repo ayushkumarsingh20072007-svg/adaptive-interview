@@ -30,12 +30,12 @@ export function Navbar() {
   ];
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-[#1e2d4f] bg-[#0c1222]/90 backdrop-blur-md">
+    <header className="sticky top-0 z-40 w-full border-b border-slate-800/80 bg-[#090e1a]/95 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Brand identity */}
         <div className="flex items-center gap-3">
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-950/60 transition-transform group-hover:scale-105">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-sm transition-transform group-hover:scale-105">
               <Sparkles className="h-4.5 w-4.5" />
             </div>
             <div className="flex flex-col">
@@ -48,7 +48,7 @@ export function Navbar() {
             </div>
           </Link>
           <div className="hidden sm:block ml-2">
-            <Badge variant="indigo">Production Demo</Badge>
+            <Badge variant="indigo">SaaS Platform</Badge>
           </div>
         </div>
 
@@ -78,7 +78,7 @@ export function Navbar() {
           {isMounted && !isLoading ? (
             user ? (
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#141e34] border border-[#1e2d4f] text-xs text-slate-200">
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#0e1628] border border-slate-800 text-xs text-slate-200">
                   <User className="h-3.5 w-3.5 text-indigo-400" />
                   <span className="max-w-[120px] truncate font-medium">{user.name}</span>
                   {user.role === "recruiter" && (
@@ -105,7 +105,7 @@ export function Navbar() {
                   </Button>
                 </Link>
                 <Link href="/signup">
-                  <Button variant="outline" size="sm" className="text-xs border-[#22304e] hover:border-indigo-600/60">
+                  <Button variant="outline" size="sm" className="text-xs border-slate-800 hover:border-slate-700">
                     Get Started
                   </Button>
                 </Link>
@@ -115,25 +115,29 @@ export function Navbar() {
             <div className="w-[140px] h-8" />
           )}
 
-          <Link href="/setup">
-            <Button size="sm" className="gap-2 shadow-sm bg-indigo-600 hover:bg-indigo-500">
-              Start Interview
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Button>
-          </Link>
+          {!user && (
+            <Link href="/setup">
+              <Button size="sm" className="gap-2 shadow-sm bg-indigo-600 hover:bg-indigo-500">
+                Start Interview
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            </Link>
+          )}
         </div>
 
         {/* Mobile Hamburger Button */}
         <div className="flex items-center md:hidden gap-2">
-          <Link href="/setup">
-            <Button size="sm" className="text-xs px-2.5 h-8 bg-indigo-600 hover:bg-indigo-500">
-              Start
-            </Button>
-          </Link>
+          {!user && (
+            <Link href="/setup">
+              <Button size="sm" className="text-xs px-2.5 h-8 bg-indigo-600 hover:bg-indigo-500">
+                Start
+              </Button>
+            </Link>
+          )}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label="Toggle Navigation Menu"
-            className="rounded-lg p-2 text-slate-300 hover:bg-[#162244] focus:outline-none"
+            className="rounded-lg p-2 text-slate-300 hover:bg-slate-800/60 focus:outline-none"
           >
             {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
@@ -142,24 +146,24 @@ export function Navbar() {
 
       {/* Mobile Navigation Dropdown */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-b border-[#1e2d4f] bg-[#0c1222] px-4 py-4 space-y-3">
+        <div className="md:hidden border-b border-slate-800 bg-[#090e1a] px-4 py-4 space-y-3">
           <div className="flex flex-col space-y-2">
             {navLinks.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={() => setMobileMenuOpen(false)}
-                className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-[#141e34] hover:text-white transition-colors"
+                className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800/50 hover:text-white transition-colors"
               >
                 {item.label}
               </Link>
             ))}
           </div>
 
-          <div className="pt-2 border-t border-[#1e2d4f] flex flex-col gap-2">
+          <div className="pt-2 border-t border-slate-800 flex flex-col gap-2">
             {isMounted && !isLoading && (
               user ? (
-                <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-[#141e34] border border-[#1e2d4f]">
+                <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-[#0e1628] border border-slate-800">
                   <div className="text-xs">
                     <div className="flex items-center gap-1.5">
                       <p className="font-semibold text-white">{user.name}</p>
@@ -203,7 +207,7 @@ export function Navbar() {
             </Link>
             <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)}>
               <Button variant="secondary" className="w-full justify-center">
-                Candidate Dashboard
+                {user?.role === "recruiter" ? "Recruiter Portal" : "Candidate Dashboard"}
               </Button>
             </Link>
           </div>

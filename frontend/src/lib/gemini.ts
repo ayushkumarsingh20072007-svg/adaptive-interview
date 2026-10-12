@@ -11,10 +11,12 @@ const PRIMARY_MODEL = "gemini-3.8-flash";
 const FALLBACK_MODEL = "gemini-3.7-flash";
 
 let _client: GoogleGenAI | null = null;
+let _currentKey: string = "";
 
 export function getClient(): GoogleGenAI {
   const key = process.env.GEMINI_API_KEY || "";
-  if (!_client || process.env.GEMINI_API_KEY !== GEMINI_API_KEY) {
+  if (!_client || key !== _currentKey) {
+    _currentKey = key;
     _client = new GoogleGenAI({ apiKey: key });
   }
   return _client;
@@ -36,12 +38,16 @@ export async function callGemini(prompt: string): Promise<string> {
     }
 
     try {
-      const interaction = await client.interactions.create({
+      const callPromise = client.interactions.create({
         model: models[attempt],
         input: prompt,
         store: false,
       });
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Gemini API call timed out after 6.5s")), 6500)
+      );
 
+      const interaction = await Promise.race([callPromise, timeoutPromise]);
       const raw = interaction.output_text?.trim() ?? "";
       if (!raw) throw new Error("Empty response from model");
       return raw;
@@ -51,6 +57,10 @@ export async function callGemini(prompt: string): Promise<string> {
         `[Gemini] Attempt ${attempt + 1}/${models.length} failed (model: ${models[attempt]}):`,
         lastError.message
       );
+      // If quota/rate-limit hit on free tier, don't wait for secondary retry
+      if (lastError.message.includes("429") || lastError.message.toLowerCase().includes("rate limit") || lastError.message.toLowerCase().includes("quota")) {
+        break;
+      }
     }
   }
 

@@ -44,6 +44,9 @@ export async function POST(req: NextRequest) {
     if (forceDeterministic || totalAnswers === 0) {
       const report = generateEvaluationReport(session);
       report.userId = effectiveUserId;
+      if (auth.user?.name) {
+        report.candidateName = auth.user.name;
+      }
       report.isDemoSimulation = true;
       const savedReport = await persistReport(report, session, effectiveUserId);
       return NextResponse.json({ report: savedReport });
@@ -85,8 +88,9 @@ EVALUATION RUBRIC & INSTRUCTIONS:
    - "evidenceQuote" and "quote" MUST be exact word-for-word substrings of the candidate's actual answer text from the transcript.
    - If no verbatim supporting quote exists, return an empty string "" for quote and state why evidence is insufficient.
    - Do NOT fabricate, rephrase, or hallucinate candidate statements.
-4. Distinguish an incorrect answer from an unassessed skill.
-5. Generate 2 to 3 targeted "recruiterFollowUps" for human recruiters in round two to probe unvalidated claims or test depth.
+4. Pinpoint exact mistakes, misconceptions, and shallow explanations in candidate responses under "areasToImprove" (explain specifically what was incorrect or missing in their answers).
+5. Outline a prioritized, practical learning and practice roadmap under "actionableRoadmap" (what exact technical concepts, design trade-offs, and tools the candidate should focus on before real company interviews).
+6. Generate 2 to 3 targeted "recruiterFollowUps" for human recruiters in round two to probe unvalidated claims or test depth.
 
 Respond ONLY with valid JSON (no markdown formatting, no code fences):
 {
@@ -271,7 +275,7 @@ Respond ONLY with valid JSON (no markdown formatting, no code fences):
 
     const report: EvaluationReport = {
       sessionId: session.id,
-      candidateName: session.setup?.candidateName || "Anonymous Candidate",
+      candidateName: auth.user?.name || session.setup?.candidateName || "Candidate",
       targetRole: ROLE_LABELS[session.setup?.targetRole || "fullstack"] || "Software Engineer",
       experienceLevel: (session.setup?.experienceLevel || "intermediate").charAt(0).toUpperCase() + (session.setup?.experienceLevel || "intermediate").slice(1),
       interviewFocus: (session.setup?.interviewFocus || "mixed").replace("-", " ").toUpperCase(),

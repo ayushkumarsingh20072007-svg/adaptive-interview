@@ -36,12 +36,10 @@ export default function RootLayout({
     >
       <body
         suppressHydrationWarning
-        className="min-h-full flex flex-col bg-[#070c18] bg-grid-pattern text-slate-100 font-sans selection:bg-indigo-500/30 selection:text-indigo-200 relative overflow-x-hidden"
+        className="min-h-full flex flex-col bg-[#090e1a] text-slate-100 font-sans selection:bg-indigo-500/30 selection:text-indigo-200 relative overflow-x-hidden"
       >
-        {/* Ambient top illumination */}
-        <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[1100px] h-[450px] bg-radial-glow pointer-events-none -z-10 blur-3xl" />
         <AuthProvider>
-          <Suspense fallback={<header className="h-16 w-full border-b border-[#182442] bg-[#070c18]/90" />}>
+          <Suspense fallback={<header className="h-16 w-full border-b border-slate-800 bg-[#090e1a]/95" />}>
             <Navbar />
           </Suspense>
           <main className="flex-1 w-full mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 flex flex-col relative z-10">

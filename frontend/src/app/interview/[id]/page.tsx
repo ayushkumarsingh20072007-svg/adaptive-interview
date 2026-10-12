@@ -5,9 +5,6 @@ import { Loader2 } from "lucide-react";
 interface Props {
   params: Promise<{ id: string }>;
 }
-
-export const instant = false;
-
 export function generateStaticParams() {
   return [{ id: "demo-session" }];
 }

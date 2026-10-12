@@ -44,6 +44,14 @@ import {
   Quote,
   AlertTriangle,
   FileQuestion,
+  LayoutDashboard,
+  PlayCircle,
+  Menu,
+  X,
+  Compass,
+  Lock,
+  Loader2,
+  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
@@ -71,30 +79,58 @@ interface CompetencyStat {
   status: SkillStatusCategory;
 }
 
+type TabType = "overview" | "history" | "skills" | "settings" | "pipeline" | "analytics" | "reviews";
+
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, isLoading } = useAuth();
   const userRole = (user as { role?: string } | null)?.role;
   const isRecruiter = userRole === "recruiter";
-  const [activeTab, setActiveTab] = React.useState<"overview" | "history" | "skills" | "settings" | "pipeline" | "analytics">(
+
+  const [activeTab, setActiveTab] = React.useState<TabType>(
     isRecruiter ? "pipeline" : "overview"
   );
+  const [mobileSidebarOpen, setMobileSidebarOpen] = React.useState(false);
 
   const isMounted = useIsMounted();
   const [refreshKey, setRefreshKey] = React.useState(0);
 
+  // Authentication guard: unauthenticated users cannot view private candidate or recruiter dashboards
+  React.useEffect(() => {
+    if (isMounted && !isLoading && !user) {
+      router.replace("/login?redirect=/dashboard");
+    }
+  }, [isMounted, isLoading, user, router]);
+
   const setup: CandidateSetup = React.useMemo(() => {
-    if (!isMounted) return SAMPLE_CANDIDATE;
-    return getStoredSetup(user?.id) || SAMPLE_CANDIDATE;
-  }, [isMounted, user?.id]);
+    if (!user) return SAMPLE_CANDIDATE;
+    const stored = getStoredSetup(user.id);
+    if (stored) return stored;
+    return {
+      candidateName: user.name || "Candidate",
+      targetRole: "fullstack",
+      experienceLevel: "intermediate",
+      interviewFocus: "mixed",
+      interviewLength: 20,
+      skills: ROLE_SKILLS.fullstack,
+      userId: user.id,
+      isSampleResume: false,
+      createdAt: new Date().toISOString(),
+    };
+  }, [user]);
+
+  const hasConfiguredResume = Boolean(
+    setup?.resumeFileName || setup?.resumeText || setup?.isSampleResume
+  );
 
   const [reports, setReports] = React.useState<EvaluationReport[]>(() => {
-    return getAllReports(user?.id, userRole as "candidate" | "recruiter" | undefined);
+    if (!user) return [];
+    return getAllReports(user.id, userRole as "candidate" | "recruiter" | undefined);
   });
 
   React.useEffect(() => {
-    if (!isMounted) return;
-    const initial = getAllReports(user?.id, userRole as "candidate" | "recruiter" | undefined);
+    if (!isMounted || !user) return;
+    const initial = getAllReports(user.id, userRole as "candidate" | "recruiter" | undefined);
     setReports(initial);
 
     let cancelled = false;
@@ -115,7 +151,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [isMounted, user?.id, userRole, refreshKey]);
+  }, [isMounted, user, userRole, refreshKey]);
 
   const [isStarting, setIsStarting] = React.useState(false);
 
@@ -172,7 +208,7 @@ export default function DashboardPage() {
       candidateName,
       status,
       currentNote,
-      user?.name || "Sarah Jenkins (Company Head)"
+      user?.name || "Talent Committee Lead (Demo)"
     );
 
     // Persist to SQLite via server API
@@ -196,7 +232,7 @@ export default function DashboardPage() {
       candidateName,
       effectiveStatus,
       savedDraft,
-      user?.name || "Sarah Jenkins (Company Head)"
+      user?.name || "Talent Committee Lead (Demo)"
     );
 
     // Persist to SQLite via server API
@@ -239,7 +275,7 @@ export default function DashboardPage() {
         r.overallScore || 0,
         `"${(r.verdict || "Under Review").replace(/"/g, '""')}"`,
         `"${effectiveStatus}"`,
-        `"${(user?.name || "Sarah Jenkins (Head of Talent)").replace(/"/g, '""')}"`,
+        `"${(user?.name || "Talent Lead (Demo)").replace(/"/g, '""')}"`,
         `"${currentNote.replace(/"/g, '""')}"`,
         `"${r.completedAt || ""}"`,
         r.durationMinutes || 0,
@@ -252,7 +288,7 @@ export default function DashboardPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `TechCorp_Talent_Pipeline_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute("download", `InterviewIQ_Talent_Pipeline_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -294,17 +330,26 @@ export default function DashboardPage() {
   }, [reports, pipelineShortlists]);
 
   function handleStartNewInterview(customRole?: TargetRole) {
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+    const storedSetup = getStoredSetup(user.id);
+    const hasResume = Boolean(storedSetup?.resumeFileName || storedSetup?.resumeText || storedSetup?.isSampleResume);
+    if (!hasResume) {
+      router.push("/setup");
+      return;
+    }
+
     setIsStarting(true);
     const sessionSetup: CandidateSetup = {
-      ...setup,
-      targetRole: customRole || setup.targetRole,
-      candidateName: user?.name || setup.candidateName || "Candidate",
-      userId: user?.id,
+      ...(storedSetup || setup),
+      targetRole: customRole || storedSetup?.targetRole || setup.targetRole,
+      candidateName: user.name || storedSetup?.candidateName || "Candidate",
+      userId: user.id,
     };
     const newSession = initializeInterviewSession(sessionSetup);
-    setTimeout(() => {
-      router.push(`/interview/${newSession.id}`);
-    }, 200);
+    window.location.assign(`/interview/${newSession.id}`);
   }
 
   async function handleLogout() {
@@ -333,7 +378,6 @@ export default function DashboardPage() {
       .filter((s) => typeof s === "number" && !isNaN(s));
     const averageScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
 
-    // Aggregate unique competencies across all completed reports
     const catMap = new Map<string, { total: number; count: number; status?: SkillStatusCategory }>();
     for (const rep of reports) {
       for (const m of rep.metrics || []) {
@@ -382,7 +426,6 @@ export default function DashboardPage() {
       notAssessed: competencies.filter((c) => c.status === "not_assessed").length,
     };
 
-    // Score trend: only calculate when multiple comparable historical evaluations exist
     let scoreTrend = null;
     if (reports.length >= 2) {
       const latest = reports[0].overallScore;
@@ -396,7 +439,6 @@ export default function DashboardPage() {
       };
     }
 
-    // Extract recommendations from actual gaps & roadmaps without fabrication
     const recSet = new Set<string>();
     for (const rep of reports) {
       for (const gap of rep.areasToImprove || []) {
@@ -422,1009 +464,587 @@ export default function DashboardPage() {
 
   const roleName = ROLE_LABELS[setup.targetRole] || "Software Engineer";
   const displayName = user?.name || setup.candidateName || "Candidate";
-  const expectedSkills = ROLE_SKILLS[setup.targetRole] || [];
 
-  return (
-    <div className="flex flex-col gap-8 max-w-6xl mx-auto w-full py-2">
-      {/* 1. ULTRA-PREMIUM COMMAND CENTER HEADER */}
-      <div className={`relative rounded-3xl border ${isRecruiter ? "border-violet-500/30 bg-gradient-to-r from-[#120f29]/95 via-[#0c0d24]/95 to-[#070814]/95 shadow-violet-950/40" : "border-indigo-500/20 bg-gradient-to-r from-[#0d152a]/95 via-[#0b1021]/95 to-[#070b16]/95 shadow-indigo-950/40"} backdrop-blur-2xl p-6 sm:p-8 shadow-2xl overflow-hidden`}>
-        {/* Ambient Top Glow Line */}
-        <div className={`absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent ${isRecruiter ? "via-violet-500/60" : "via-indigo-500/60"} to-transparent`} />
-        <div className={`absolute top-0 right-1/4 w-80 h-32 ${isRecruiter ? "bg-violet-500/10" : "bg-indigo-500/10"} rounded-full blur-3xl pointer-events-none`} />
+  // Navigation Items
+  const candidateNavItems = [
+    { id: "overview" as TabType, label: "Overview", icon: LayoutDashboard },
+    { id: "history" as TabType, label: "My Reports", icon: FileText, count: reports.length },
+    { id: "skills" as TabType, label: "Skills & Progress", icon: BrainCircuit },
+    { id: "settings" as TabType, label: "Profile", icon: User },
+  ];
 
-        <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide ${isRecruiter ? "bg-violet-950/80 text-violet-300 border-violet-700/40" : "bg-indigo-950/80 text-indigo-300 border-indigo-700/40"} border shadow-inner`}>
-                <Sparkles className={`h-3.5 w-3.5 ${isRecruiter ? "text-violet-400" : "text-indigo-400"} animate-pulse`} />
-                {isRecruiter ? "Company Head · TechCorp Global" : "Adaptive AI Intelligence Engine"}
-              </span>
+  const recruiterNavItems = [
+    { id: "overview" as TabType, label: "Overview", icon: LayoutDashboard },
+    { id: "pipeline" as TabType, label: "Candidate Pipeline", icon: Users, count: reports.length },
+    { id: "analytics" as TabType, label: "Analytics", icon: BarChart3 },
+    { id: "reviews" as TabType, label: "Reviews & Shortlist", icon: Star, count: recruiterStats.shortlisted + recruiterStats.underReview },
+  ];
 
-              {user ? (
-                <div className="flex items-center gap-2">
-                  <Badge variant="success" className="text-[11px]">
-                    <CheckCircle2 className="h-3 w-3 mr-1" />
-                    {isRecruiter ? `Hiring Lead: ${user.name}` : `Verified: ${user.email}`}
-                  </Badge>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleLogout}
-                    className="h-6 px-2 text-[11px] text-rose-300 hover:text-white hover:bg-rose-950/40 gap-1"
-                    title="Log out of account"
-                  >
-                    <LogOut className="h-3 w-3 text-rose-400" />
-                    Log Out
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Badge variant="default" className="text-[11px]">
-                    Guest Demo Sandbox
-                  </Badge>
-                  <Link href="/login">
-                    <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px] text-indigo-300 hover:text-white hover:bg-indigo-950/40 gap-1">
-                      Sign In
-                    </Button>
-                  </Link>
-                </div>
-              )}
+  const navItems = isRecruiter ? recruiterNavItems : candidateNavItems;
 
-              {isRecruiter ? (
-                <span className="text-xs text-violet-300 font-mono flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-ping" />
-                  Role: Company Head & Talent Committee
-                </span>
-              ) : (
-                <span className="text-xs text-slate-400 font-mono flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
-                  Track: {roleName}
-                </span>
-              )}
-            </div>
+  const currentTabTitle = React.useMemo(() => {
+    switch (activeTab) {
+      case "overview": return isRecruiter ? "Hiring Overview" : "Candidate Overview";
+      case "history": return "Evaluation Reports & Archives";
+      case "skills": return "Skills & Competency Diagnostics";
+      case "settings": return "Profile & Track Calibration";
+      case "pipeline": return "Candidate Pipeline";
+      case "analytics": return "Company Hiring Analytics";
+      case "reviews": return "Shortlist Decisions & Review Notes";
+      default: return "Dashboard";
+    }
+  }, [activeTab, isRecruiter]);
 
-            <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-              {isRecruiter ? (
-                <>
-                  Talent Pipeline & <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-indigo-400 bg-clip-text text-transparent">Shortlist Authority</span>
-                </>
-              ) : (
-                <>
-                  Welcome back, <span className="text-gradient-primary">{displayName}</span>
-                </>
-              )}
-            </h1>
+  if (!isMounted || isLoading) {
+    return (
+      <div className="min-h-screen bg-[#090e1a] flex items-center justify-center p-4">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-indigo-400" />
+          <p className="text-xs text-slate-400 font-medium">Verifying workspace session...</p>
+        </div>
+      </div>
+    );
+  }
 
-            <p className="text-sm text-slate-300 max-w-2xl leading-relaxed">
-              {isRecruiter
-                ? "Unified leadership portal. Access every candidate's technical interview records, inspect verbatim question & answer transcripts, and execute hiring decisions with persistent notes."
-                : "Real-time technical interview analytics command center. Calibrate your profile, execute adaptive AI sessions, and inspect evidence-backed scorecards with quote citations."}
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-[#090e1a] flex items-center justify-center p-4">
+        <Card className="max-w-md w-full p-8 border-slate-800 bg-[#0e1628] text-center space-y-5 shadow-2xl">
+          <div className="h-12 w-12 rounded-xl bg-indigo-950/60 border border-indigo-700/50 flex items-center justify-center text-indigo-400 mx-auto">
+            <Lock className="h-6 w-6" />
+          </div>
+          <div className="space-y-1.5">
+            <Badge variant="indigo" className="text-[10px]">Private Workspace</Badge>
+            <h2 className="text-xl font-bold text-white">Sign In Required</h2>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              You must be signed in to view your candidate interview dashboard or access the recruiter pipeline.
             </p>
           </div>
+          <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
+            <Button
+              className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold h-9"
+              onClick={() => router.push("/login?redirect=/dashboard")}
+            >
+              Sign In
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1 text-xs border-slate-700 hover:bg-slate-800/60 h-9"
+              onClick={() => router.push("/signup")}
+            >
+              Create Account
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+  return (
+    <div className="flex flex-col lg:flex-row gap-6 w-full max-w-7xl mx-auto py-2">
+      {/* ========================================================================= */}
+      {/* SAAS RESPONSIVE APPLICATION SHELL: LEFT SIDEBAR                          */}
+      {/* ========================================================================= */}
+      <aside className="lg:w-64 shrink-0 flex flex-col gap-4">
+        {/* Workspace Card */}
+        <div className="p-4 sm:p-5 rounded-2xl border border-slate-800/80 bg-[#0c1427]/90 backdrop-blur-md shadow-md">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-600/30 font-bold text-xs">
+                IQ
+              </div>
+              <div>
+                <span className="font-bold text-sm text-white block leading-tight tracking-tight">InterviewIQ</span>
+                <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider block mt-0.5">
+                  {isRecruiter ? "Recruiter Portal" : "Candidate Hub"}
+                </span>
+              </div>
+            </div>
+            {/* Mobile toggle button */}
+            <button
+              onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+              className="lg:hidden p-2 rounded-xl border border-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors"
+              aria-label="Toggle Navigation"
+            >
+              {mobileSidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            </button>
+          </div>
+
+          <div className="mt-4 pt-3.5 border-t border-slate-800/80 flex items-center justify-between text-xs">
+            <span className="text-slate-400">Environment:</span>
+            <Badge variant="indigo" className="text-[10px] py-0.5 px-2 font-mono">SQLite Active</Badge>
+          </div>
+        </div>
+
+        {/* Sidebar Nav: Desktop or open Mobile Drawer */}
+        <div className={`flex flex-col gap-1.5 p-2.5 rounded-2xl border border-slate-800/80 bg-[#0c1427]/90 shadow-md ${mobileSidebarOpen ? "block" : "hidden lg:flex"}`}>
+          <span className="px-3.5 py-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+            Workspace Navigation
+          </span>
+          {navItems.map((item) => {
+            const isActive = activeTab === item.id;
+            const Icon = item.icon;
+
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  setMobileSidebarOpen(false);
+                }}
+                className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all text-left ${
+                  isActive
+                    ? "bg-indigo-600/20 text-indigo-200 border border-indigo-500/40 font-semibold shadow-sm"
+                    : "text-slate-300 hover:text-white hover:bg-slate-800/60"
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Icon className={`h-4 w-4 ${isActive ? "text-indigo-400" : "text-slate-400"}`} />
+                  <span>{item.label}</span>
+                </div>
+                {item.count !== undefined && (
+                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${isActive ? "bg-indigo-500/30 text-indigo-200" : "bg-slate-800 text-slate-400"}`}>
+                    {item.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* User Card at bottom of Sidebar */}
+        <div className={`p-4 rounded-2xl border border-slate-800/80 bg-[#0c1427]/90 shadow-md flex flex-col gap-3 ${mobileSidebarOpen ? "block" : "hidden lg:flex"}`}>
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-full bg-slate-800 border border-slate-700/80 flex items-center justify-center font-bold text-xs text-indigo-300 shadow-inner">
+              {displayName.slice(0, 2).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="font-semibold text-xs text-white block truncate">{displayName}</span>
+              <span className="text-[10px] text-slate-400 block truncate font-mono">
+                {user ? user.email : "Local Demo User"}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-2.5 border-t border-slate-800/80">
+            <Badge variant={isRecruiter ? "indigo" : "default"} className="text-[10px] py-0.5 px-2">
+              {isRecruiter ? "Recruiter" : "Candidate"}
+            </Badge>
+
+            {user ? (
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-1.5 text-xs text-rose-400 hover:text-rose-300 transition-colors font-medium"
+                title="Sign out of account"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span>Log Out</span>
+              </button>
+            ) : (
+              <Link href="/login" className="text-xs text-indigo-400 hover:underline font-medium">
+                Sign In
+              </Link>
+            )}
+          </div>
+        </div>
+      </aside>
+
+      {/* ========================================================================= */}
+      {/* MAIN CONTENT AREA                                                         */}
+      {/* ========================================================================= */}
+      <main className="flex-1 min-w-0 flex flex-col gap-6">
+        {/* Compact Breadcrumb / Action Header */}
+        <div className="p-5 sm:p-6 rounded-2xl border border-slate-800/80 bg-gradient-to-r from-[#0d162c]/90 via-[#0a1122]/90 to-[#0e172e]/90 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md backdrop-blur-md">
+          <div>
+            <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
+              <span>InterviewIQ</span>
+              <span className="text-slate-600">/</span>
+              <span className="text-indigo-400 font-medium">{currentTabTitle}</span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">{currentTabTitle}</h1>
+          </div>
+
+          <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
             {isRecruiter ? (
               <>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleExportPipelineCSV}
-                  className="gap-2 text-xs h-10 px-4 border-violet-800/60 text-violet-300 hover:bg-violet-950/50 hover:text-white"
-                  title="Export candidate pipeline as CSV"
+                  className="gap-1.5 text-xs h-9 px-3.5 rounded-xl border-slate-700/80 text-slate-300 hover:text-white"
                 >
-                  <Download className="h-3.5 w-3.5 text-violet-400" />
-                  Export Pipeline (CSV)
+                  <Download className="h-3.5 w-3.5 text-slate-400" />
+                  Export CSV
                 </Button>
-
                 <Button
                   variant="secondary"
                   size="sm"
                   onClick={() => setRefreshKey((k) => k + 1)}
-                  className="gap-2 text-xs h-10 px-3.5 border-slate-700/60"
-                  title="Reload all stored candidate records"
+                  className="gap-1.5 text-xs h-9 px-3.5 rounded-xl border-slate-700/80"
                 >
-                  <RefreshCw className="h-3.5 w-3.5 text-slate-300" />
+                  <RefreshCw className="h-3.5 w-3.5 text-slate-400" />
                   Refresh
                 </Button>
-
-                {reports.length > 0 && (
-                  <Link href={`/report/${reports[0].sessionId}`}>
-                    <Button variant="outline" size="sm" className="gap-2 text-xs h-10 px-4 border-indigo-900/40 hover:border-indigo-500/50">
-                      <FileText className="h-3.5 w-3.5 text-indigo-400" />
-                      Latest Audit
-                    </Button>
-                  </Link>
-                )}
               </>
             ) : (
-              <>
-                {user && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleLogout}
-                    className="gap-1.5 text-xs h-10 px-3.5 border-rose-900/50 text-rose-300 hover:bg-rose-950/40 hover:text-white"
-                    title="Log out of account"
-                  >
-                    <LogOut className="h-3.5 w-3.5 text-rose-400" />
-                    <span className="hidden sm:inline">Log Out</span>
-                  </Button>
-                )}
-
-                <Link href="/setup">
-                  <Button variant="secondary" size="sm" className="gap-2 text-xs h-10 px-4">
-                    <Settings className="h-3.5 w-3.5 text-slate-400" />
-                    Recalibrate Track
-                  </Button>
-                </Link>
-
-                {reports.length > 0 && (
-                  <Link href={`/report/${reports[0].sessionId}`}>
-                    <Button variant="outline" size="sm" className="gap-2 text-xs h-10 px-4 border-indigo-900/40 hover:border-indigo-500/50">
-                      <FileText className="h-3.5 w-3.5 text-indigo-400" />
-                      Latest Audit
-                    </Button>
-                  </Link>
-                )}
-
-                <Button
-                  size="md"
-                  onClick={() => handleStartNewInterview()}
-                  isLoading={isStarting}
-                  className="gap-2 font-bold shadow-xl shadow-indigo-600/25 h-10 px-5"
-                >
-                  <Play className="h-4 w-4 fill-current" />
-                  Launch Live Interview
+              <Link href="/setup">
+                <Button variant="outline" size="sm" className="gap-2 text-xs h-9 px-4 rounded-xl border-slate-700/80 text-slate-300 hover:text-white">
+                  {hasConfiguredResume ? (
+                    <>
+                      <Settings className="h-3.5 w-3.5 text-slate-400" />
+                      Configure Track / CV
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-3.5 w-3.5 text-amber-400" />
+                      Upload Resume / CV
+                    </>
+                  )}
                 </Button>
-              </>
+              </Link>
             )}
           </div>
         </div>
-      </div>
 
-      {/* 2. TOP 4 ANALYTICS COMMAND CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {isRecruiter ? (
-          <>
-            {/* Recruiter Card 1: Candidate Pool */}
-            <Card className="p-5 relative overflow-hidden group hover:border-violet-500/40 transition-all duration-300 hover:-translate-y-1">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-violet-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-violet-500/10 transition-colors" />
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span className="font-semibold uppercase tracking-wider text-[10px]">Candidate Pool</span>
-                <div className="h-8 w-8 rounded-xl bg-violet-950/80 border border-violet-800/40 flex items-center justify-center text-violet-400">
-                  <Users className="h-4 w-4" />
-                </div>
-              </div>
-              <p className="text-3xl font-extrabold text-white mt-3 font-mono tracking-tight">
-                {recruiterStats.total}
-              </p>
-              <div className="text-[11px] text-slate-400 mt-2 flex items-center gap-1.5">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                <span className="text-emerald-400 font-medium">100% verified AI interviews</span>
-              </div>
-            </Card>
-
-            {/* Recruiter Card 2: Shortlisted Talent */}
-            <Card className="p-5 relative overflow-hidden group hover:border-emerald-500/40 transition-all duration-300 hover:-translate-y-1">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-emerald-500/10 transition-colors" />
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span className="font-semibold uppercase tracking-wider text-[10px]">Shortlisted Talent</span>
-                <div className="h-8 w-8 rounded-xl bg-emerald-950/80 border border-emerald-800/40 flex items-center justify-center text-emerald-400">
-                  <Star className="h-4 w-4 fill-current" />
-                </div>
-              </div>
-              <p className="text-3xl font-extrabold text-emerald-400 mt-3 font-mono tracking-tight">
-                {recruiterStats.shortlisted}
-              </p>
-              <div className="text-[11px] text-slate-400 mt-2">
-                <span className="text-emerald-400 font-medium font-mono">{recruiterStats.shortlistRate}%</span>{" "}
-                <span className="text-slate-400">conversion rate</span>
-              </div>
-            </Card>
-
-            {/* Recruiter Card 3: Batch Average Score */}
-            <Card className="p-5 relative overflow-hidden group hover:border-indigo-500/40 transition-all duration-300 hover:-translate-y-1">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-indigo-500/10 transition-colors" />
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span className="font-semibold uppercase tracking-wider text-[10px]">Batch Average Score</span>
-                <div className="h-8 w-8 rounded-xl bg-indigo-950/80 border border-indigo-800/40 flex items-center justify-center text-indigo-400">
-                  <TrendingUp className="h-4 w-4" />
-                </div>
-              </div>
-              <p className="text-3xl font-extrabold text-gradient-primary mt-3 font-mono tracking-tight">
-                {recruiterStats.avgScore}%
-              </p>
-              <div className="text-[11px] text-slate-400 mt-2 truncate">
-                <span className={recruiterStats.avgScore >= 80 ? "text-emerald-400 font-medium" : "text-amber-400 font-medium"}>
-                  {recruiterStats.avgScore >= 80 ? "High Caliber Applicant Pool" : "Standard Applicant Benchmark"}
-                </span>
-              </div>
-            </Card>
-
-            {/* Recruiter Card 4: Awaiting Decision */}
-            <Card className="p-5 relative overflow-hidden group hover:border-amber-500/40 transition-all duration-300 hover:-translate-y-1">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-amber-500/10 transition-colors" />
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span className="font-semibold uppercase tracking-wider text-[10px]">Awaiting Decision</span>
-                <div className="h-8 w-8 rounded-xl bg-amber-950/80 border border-amber-800/40 flex items-center justify-center text-amber-400">
-                  <Clock3 className="h-4 w-4" />
-                </div>
-              </div>
-              <p className="text-3xl font-extrabold text-amber-400 mt-3 font-mono tracking-tight">
-                {recruiterStats.pending + recruiterStats.underReview}
-              </p>
-              <div className="text-[11px] text-slate-400 mt-2 truncate">
-                <span className="text-amber-300 font-mono">{recruiterStats.pending}</span> pending ·{" "}
-                <span className="text-amber-400 font-mono">{recruiterStats.underReview}</span> in review
-              </div>
-            </Card>
-          </>
-        ) : (
-          <>
-            {/* Candidate Card 1: Completed Audits */}
-            <Card className="p-5 relative overflow-hidden group hover:border-indigo-500/40 transition-all duration-300 hover:-translate-y-1">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-indigo-500/10 transition-colors" />
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span className="font-semibold uppercase tracking-wider text-[10px]">Completed Audits</span>
-                <div className="h-8 w-8 rounded-xl bg-indigo-950/80 border border-indigo-800/40 flex items-center justify-center text-indigo-400">
-                  <FileText className="h-4 w-4" />
-                </div>
-              </div>
-              <p className="text-3xl font-extrabold text-white mt-3 font-mono tracking-tight">
-                {analytics.completedCount}
-              </p>
-              <div className="text-[11px] text-slate-400 mt-2 flex items-center gap-1.5">
-                {analytics.completedCount > 0 ? (
-                  <>
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                    <span className="text-emerald-400 font-medium">Verified evaluation records</span>
-                  </>
-                ) : (
-                  <span className="text-slate-500 font-mono">0 sessions logged yet</span>
-                )}
-              </div>
-            </Card>
-
-            {/* Candidate Card 2: Composite Score */}
-            <Card className="p-5 relative overflow-hidden group hover:border-violet-500/40 transition-all duration-300 hover:-translate-y-1">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-violet-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-violet-500/10 transition-colors" />
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span className="font-semibold uppercase tracking-wider text-[10px]">Composite Readiness</span>
-                <div className="h-8 w-8 rounded-xl bg-violet-950/80 border border-violet-800/40 flex items-center justify-center text-violet-400">
-                  <TrendingUp className="h-4 w-4" />
-                </div>
-              </div>
-              <p className="text-3xl font-extrabold text-gradient-primary mt-3 font-mono tracking-tight">
-                {analytics.averageScore !== null ? `${analytics.averageScore}%` : "—"}
-              </p>
-              <div className="text-[11px] text-slate-400 mt-2 truncate">
-                {analytics.averageScore !== null ? (
-                  <span className={analytics.averageScore >= 88 ? "text-emerald-400 font-medium" : analytics.averageScore >= 72 ? "text-indigo-300 font-medium" : "text-amber-400 font-medium"}>
-                    {analytics.averageScore >= 88 ? "Strong Hire Tier" : analytics.averageScore >= 72 ? "Hire Recommendation Tier" : "Additional Review Tier"}
-                  </span>
-                ) : (
-                  <span className="text-slate-500 font-mono">Benchmark pending 1st session</span>
-                )}
-              </div>
-            </Card>
-
-            {/* Candidate Card 3: Strongest Competency */}
-            <Card className="p-5 relative overflow-hidden group hover:border-emerald-500/40 transition-all duration-300 hover:-translate-y-1">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-emerald-500/10 transition-colors" />
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span className="font-semibold uppercase tracking-wider text-[10px]">Top Competency</span>
-                <div className="h-8 w-8 rounded-xl bg-emerald-950/80 border border-emerald-800/40 flex items-center justify-center text-emerald-400">
-                  <Award className="h-4 w-4" />
-                </div>
-              </div>
-              <p className="text-lg font-bold text-white mt-3 truncate">
-                {analytics.strongest ? analytics.strongest.category : "Pending Analysis"}
-              </p>
-              <div className="text-[11px] text-slate-400 mt-2">
-                {analytics.strongest ? (
-                  <span className="text-emerald-400 font-medium font-mono">
-                    {analytics.strongest.avgScore}% • {analytics.strongest.level}
-                  </span>
-                ) : (
-                  <span className="text-slate-500 font-mono">Unlocks after 1st interview</span>
-                )}
-              </div>
-            </Card>
-
-            {/* Candidate Card 4: Improvement Priority */}
-            <Card className="p-5 relative overflow-hidden group hover:border-amber-500/40 transition-all duration-300 hover:-translate-y-1">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-amber-500/10 transition-colors" />
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span className="font-semibold uppercase tracking-wider text-[10px]">Improvement Focus</span>
-                <div className="h-8 w-8 rounded-xl bg-amber-950/80 border border-amber-800/40 flex items-center justify-center text-amber-400">
-                  <Target className="h-4 w-4" />
-                </div>
-              </div>
-              <p className="text-lg font-bold text-white mt-3 truncate">
-                {analytics.priority ? analytics.priority.category : "Pending Analysis"}
-              </p>
-              <div className="text-[11px] text-slate-400 mt-2">
-                {analytics.priority ? (
-                  <span className="text-amber-400 font-medium font-mono">
-                    {analytics.priority.avgScore}% • Priority Drill
-                  </span>
-                ) : (
-                  <span className="text-slate-500 font-mono">Unlocks after 1st interview</span>
-                )}
-              </div>
-            </Card>
-          </>
-        )}
-      </div>
-
-      {/* 3. SEGMENTED TABS NAVIGATION */}
-      {isRecruiter ? (
-        <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-[#0a0f1d]/90 border border-violet-950/80 backdrop-blur-xl overflow-x-auto">
-          <button
-            onClick={() => setActiveTab("pipeline")}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
-              activeTab === "pipeline"
-                ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-md shadow-violet-950/80"
-                : "text-slate-400 hover:text-slate-200 hover:bg-[#131d35]/60"
-            }`}
-          >
-            <Users className="h-4 w-4" />
-            Candidate Pipeline ({reports.length})
-          </button>
-
-          <button
-            onClick={() => setActiveTab("analytics")}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
-              activeTab === "analytics"
-                ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-md shadow-violet-950/80"
-                : "text-slate-400 hover:text-slate-200 hover:bg-[#131d35]/60"
-            }`}
-          >
-            <BarChart3 className="h-4 w-4" />
-            Company Hiring Analytics
-          </button>
-
-          <button
-            onClick={() => setActiveTab("history")}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
-              activeTab === "history"
-                ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-md shadow-violet-950/80"
-                : "text-slate-400 hover:text-slate-200 hover:bg-[#131d35]/60"
-            }`}
-          >
-            <History className="h-4 w-4" />
-            All Candidate Transcripts ({reports.length})
-          </button>
-        </div>
-      ) : (
-        <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-[#0a0f1d]/90 border border-indigo-950/80 backdrop-blur-xl overflow-x-auto">
-          <button
-            onClick={() => setActiveTab("overview")}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
-              activeTab === "overview"
-                ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-950/80"
-                : "text-slate-400 hover:text-slate-200 hover:bg-[#131d35]/60"
-            }`}
-          >
-            <Layers className="h-4 w-4" />
-            Overview Command
-          </button>
-
-          <button
-            onClick={() => setActiveTab("history")}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
-              activeTab === "history"
-                ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-950/80"
-                : "text-slate-400 hover:text-slate-200 hover:bg-[#131d35]/60"
-            }`}
-          >
-            <History className="h-4 w-4" />
-            My Evaluation History ({reports.length})
-          </button>
-
-          <button
-            onClick={() => setActiveTab("skills")}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
-              activeTab === "skills"
-                ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-950/80"
-                : "text-slate-400 hover:text-slate-200 hover:bg-[#131d35]/60"
-            }`}
-          >
-            <BrainCircuit className="h-4 w-4" />
-            Skills & Diagnostics
-          </button>
-
-          <button
-            onClick={() => setActiveTab("settings")}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all whitespace-nowrap ${
-              activeTab === "settings"
-                ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-950/80"
-                : "text-slate-400 hover:text-slate-200 hover:bg-[#131d35]/60"
-            }`}
-          >
-            <User className="h-4 w-4" />
-            Profile Configuration
-          </button>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB 1: OVERVIEW                                                           */}
-      {/* ========================================================================= */}
-      {activeTab === "overview" && (
-        <div className="space-y-6">
-          {/* ZERO STATE: High Impact, Non-Fabricated First Time Command Center */}
-          {reports.length === 0 ? (
-            <div className="space-y-6">
-              {/* Luminous Hero Onboarding Card */}
-              <div className="relative rounded-3xl border border-indigo-500/30 bg-gradient-to-br from-[#10182b] via-[#0c1222] to-[#070b14] p-6 sm:p-8 overflow-hidden shadow-2xl">
-                <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
-                <div className="absolute bottom-0 left-0 w-64 h-64 bg-violet-600/10 rounded-full blur-3xl pointer-events-none" />
-
-                <div className="relative flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-                  <div className="space-y-3 max-w-2xl">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-indigo-700/50 bg-indigo-950/70 px-3.5 py-1 text-xs text-indigo-300">
-                      <Zap className="h-3.5 w-3.5 text-indigo-400" />
-                      <span>Ready for Baseline Adaptive Evaluation</span>
+        {/* ========================================================================= */}
+        {/* TAB 1: OVERVIEW (CANDIDATE OR RECRUITER)                                  */}
+        {/* ========================================================================= */}
+        {activeTab === "overview" && (
+          <div className="space-y-6">
+            {isRecruiter ? (
+              /* --- RECRUITER EXECUTIVE OVERVIEW --- */
+              <div className="space-y-6">
+                {/* 4 Clean Metric Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="p-5 sm:p-6 rounded-2xl border border-slate-800/80 bg-gradient-to-br from-[#0e1628] via-[#0b1224] to-[#080e1c] shadow-md shadow-black/20 hover:border-slate-700/80 transition-all flex flex-col justify-between">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Candidate Pool</span>
+                      <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                        <Users className="h-4 w-4" />
+                      </div>
                     </div>
+                    <div>
+                      <span className="text-3xl font-extrabold font-mono text-white block tracking-tight">{recruiterStats.total}</span>
+                      <span className="text-xs text-slate-400 mt-2 block">Total evaluated records</span>
+                    </div>
+                  </div>
 
-                    <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                      Calibrate and Launch Your AI Interview in {roleName}
-                    </h2>
+                  <div className="p-5 sm:p-6 rounded-2xl border border-slate-800/80 bg-gradient-to-br from-[#0e1628] via-[#0b1224] to-[#080e1c] shadow-md shadow-black/20 hover:border-slate-700/80 transition-all flex flex-col justify-between">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Shortlisted</span>
+                      <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <Star className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-3xl font-extrabold font-mono text-emerald-400 block tracking-tight">{recruiterStats.shortlisted}</span>
+                      <span className="text-xs text-emerald-400/90 mt-2 block">{recruiterStats.shortlistRate}% conversion rate</span>
+                    </div>
+                  </div>
 
-                    <p className="text-sm text-slate-300 leading-relaxed">
-                      Experience rigorous technical evaluation: Gemini AI asks open-ended architectural and implementation questions, dynamically analyzes your exact quotes, and builds your evidence scorecard.
-                    </p>
+                  <div className="p-5 sm:p-6 rounded-2xl border border-slate-800/80 bg-gradient-to-br from-[#0e1628] via-[#0b1224] to-[#080e1c] shadow-md shadow-black/20 hover:border-slate-700/80 transition-all flex flex-col justify-between">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Active Review</span>
+                      <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                        <Clock3 className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-3xl font-extrabold font-mono text-amber-400 block tracking-tight">{recruiterStats.underReview + recruiterStats.pending}</span>
+                      <span className="text-xs text-slate-400 mt-2 block">{recruiterStats.underReview} review · {recruiterStats.pending} pending</span>
+                    </div>
+                  </div>
 
-                    <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400 pt-2">
-                      <span className="flex items-center gap-1.5 bg-[#141e34]/80 px-3 py-1 rounded-lg border border-[#22304e]">
-                        <Clock className="h-3.5 w-3.5 text-indigo-400" />
-                        {setup.interviewLength || 20} Min format (~3–4 dynamic questions)
-                      </span>
-                      <span className="flex items-center gap-1.5 bg-[#141e34]/80 px-3 py-1 rounded-lg border border-[#22304e]">
-                        <Target className="h-3.5 w-3.5 text-indigo-400" />
-                        Focus: {setup.interviewFocus.replace("-", " ").toUpperCase()}
-                      </span>
-                      <span className="flex items-center gap-1.5 bg-[#141e34]/80 px-3 py-1 rounded-lg border border-[#22304e]">
-                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-                        Evidence-verified citations
+                  <div className="p-5 sm:p-6 rounded-2xl border border-slate-800/80 bg-gradient-to-br from-[#0e1628] via-[#0b1224] to-[#080e1c] shadow-md shadow-black/20 hover:border-slate-700/80 transition-all flex flex-col justify-between">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Average Score</span>
+                      <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                        <Award className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-3xl font-extrabold font-mono text-indigo-400 block tracking-tight">{recruiterStats.avgScore}%</span>
+                      <span className="text-xs text-slate-400 mt-2 block">Benchmark calibration</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Pipeline Summary Card */}
+                <Card className="rounded-2xl border border-slate-800/80 bg-[#0c1427]/90 shadow-md overflow-hidden">
+                  <CardHeader className="p-6 border-b border-slate-800/80">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-base sm:text-lg">Recent Candidate Evaluations</CardTitle>
+                        <CardDescription className="text-xs mt-0.5">Top candidates across evaluated technical tracks.</CardDescription>
+                      </div>
+                      <Button size="sm" variant="outline" onClick={() => setActiveTab("pipeline")} className="text-xs gap-1.5 h-8.5 rounded-xl border-slate-700">
+                        View Pipeline ({reports.length})
+                        <ChevronRight className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-6 space-y-3">
+                    {reports.slice(0, 4).map((rep) => {
+                      const status = pipelineShortlists[rep.sessionId] ?? rep.shortlistStatus ?? "pending";
+                      return (
+                        <div key={rep.sessionId} className="p-4 rounded-xl border border-slate-800/80 bg-[#090e1a]/80 hover:bg-[#0f172a] hover:border-slate-700 transition-all flex items-center justify-between gap-4">
+                          <div className="space-y-1">
+                            <span className="font-semibold text-sm text-white block">{rep.candidateName}</span>
+                            <span className="text-xs text-slate-400">{rep.targetRole} · {rep.completedAt}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Badge variant={rep.overallScore >= 85 ? "success" : rep.overallScore >= 70 ? "indigo" : "warning"} className="text-xs font-mono py-0.5 px-2">
+                              {rep.overallScore}%
+                            </Badge>
+                            <Badge variant="outline" className="text-[11px] capitalize">
+                              {status}
+                            </Badge>
+                            <Link href={`/report/${rep.sessionId}`}>
+                              <Button size="sm" variant="ghost" className="h-8 text-xs text-indigo-400 hover:text-white px-2.5">
+                                Inspect
+                              </Button>
+                            </Link>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
+              /* --- CANDIDATE OVERVIEW --- */
+              <div className="space-y-6">
+                {/* 4 Clean Metric Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="p-5 sm:p-6 rounded-2xl border border-slate-800/80 bg-gradient-to-br from-[#0e1628] via-[#0b1224] to-[#080e1c] shadow-md shadow-black/20 hover:border-slate-700/80 transition-all flex flex-col justify-between">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Completed Interviews</span>
+                      <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <CheckCircle2 className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-3xl font-extrabold font-mono text-white block tracking-tight">{analytics.completedCount}</span>
+                      <span className="text-xs text-slate-400 mt-2 block">
+                        {analytics.completedCount > 0 ? "Evaluation sessions logged" : "0 sessions yet"}
                       </span>
                     </div>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row lg:flex-col gap-3 w-full lg:w-auto shrink-0">
+                  <div className="p-5 sm:p-6 rounded-2xl border border-slate-800/80 bg-gradient-to-br from-[#0e1628] via-[#0b1224] to-[#080e1c] shadow-md shadow-black/20 hover:border-slate-700/80 transition-all flex flex-col justify-between">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Readiness Score</span>
+                      <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                        <Sparkles className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-3xl font-extrabold font-mono text-indigo-400 block tracking-tight">
+                        {analytics.averageScore !== null ? `${analytics.averageScore}%` : "—"}
+                      </span>
+                      <span className="text-xs text-slate-400 mt-2 block">
+                        {analytics.averageScore !== null ? (analytics.averageScore >= 85 ? "Strong Hire Tier" : "Proficient Tier") : "Pending first audit"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-5 sm:p-6 rounded-2xl border border-slate-800/80 bg-gradient-to-br from-[#0e1628] via-[#0b1224] to-[#080e1c] shadow-md shadow-black/20 hover:border-slate-700/80 transition-all flex flex-col justify-between">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Top Competency</span>
+                      <div className="p-2 rounded-xl bg-violet-500/10 text-violet-400 border border-violet-500/20">
+                        <Award className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-sm font-bold text-emerald-400 block truncate" title={analytics.strongest?.category || ""}>
+                        {analytics.strongest ? analytics.strongest.category : "—"}
+                      </span>
+                      <span className="text-xs text-slate-400 mt-2 block">
+                        {analytics.strongest ? `${analytics.strongest.avgScore}% (${analytics.strongest.level})` : "Unlocks after session"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-5 sm:p-6 rounded-2xl border border-slate-800/80 bg-gradient-to-br from-[#0e1628] via-[#0b1224] to-[#080e1c] shadow-md shadow-black/20 hover:border-slate-700/80 transition-all flex flex-col justify-between">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Priority Drill</span>
+                      <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                        <Target className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-sm font-bold text-amber-400 block truncate" title={analytics.priority?.category || ""}>
+                        {analytics.priority ? analytics.priority.category : "—"}
+                      </span>
+                      <span className="text-xs text-slate-400 mt-2 block">
+                        {analytics.priority ? `${analytics.priority.avgScore}% Focus` : "Unlocks after session"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Single Primary Action Card: Gated by Resume Upload */}
+                {!hasConfiguredResume ? (
+                  <div className="p-6 sm:p-8 rounded-2xl border border-amber-500/40 bg-gradient-to-br from-amber-950/25 via-[#141220] to-[#0c101e] shadow-xl shadow-amber-950/20 relative overflow-hidden flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                    <div className="space-y-2.5 max-w-2xl relative z-10">
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                          <Upload className="h-4 w-4" />
+                        </div>
+                        <span className="font-bold text-base sm:text-lg text-white">Step 1: Upload Resume / CV to Unlock Interview</span>
+                        <Badge variant="warning" className="text-xs font-semibold">Action Required</Badge>
+                      </div>
+                      <p className="text-xs sm:text-sm text-slate-300/90 leading-relaxed">
+                        To calibrate realistic, adaptive AI technical questions according to your real projects and background, please upload your resume first.
+                      </p>
+                    </div>
+                    <Link href="/setup" className="shrink-0 relative z-10">
+                      <Button
+                        size="lg"
+                        className="w-full sm:w-auto h-12 px-7 rounded-xl gap-2.5 font-bold text-sm bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white shadow-lg shadow-amber-600/30 active:scale-[0.98] transition-all"
+                      >
+                        <Upload className="h-4 w-4" />
+                        Upload Resume / CV First
+                      </Button>
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="p-6 sm:p-8 rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-[#121c38] via-[#0d152a] to-[#090e1c] shadow-xl shadow-indigo-950/40 relative overflow-hidden flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                    {/* Ambient Glows */}
+                    <div className="absolute -right-20 -top-20 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
+                    <div className="absolute -left-16 -bottom-16 w-52 h-52 bg-violet-600/10 rounded-full blur-3xl pointer-events-none" />
+
+                    <div className="space-y-3 max-w-2xl relative z-10">
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <div className="p-2 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                          <Sparkles className="h-4 w-4" />
+                        </div>
+                        <span className="font-bold text-base sm:text-lg text-white">Target Track: {roleName}</span>
+                        <Badge variant="indigo" className="text-xs capitalize">{setup.experienceLevel}</Badge>
+                        <Badge variant="success" className="text-xs">CV Calibrated</Badge>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-slate-400">Calibrated File:</span>
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-indigo-950/80 border border-indigo-700/60 text-xs text-indigo-300 font-mono shadow-inner">
+                          <FileText className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                          <span className="max-w-[220px] sm:max-w-sm truncate">{setup.resumeFileName || "Custom Resume Profile"}</span>
+                        </div>
+                      </div>
+
+                      <p className="text-xs sm:text-sm text-slate-300/90 leading-relaxed">
+                        Ready to begin your adaptive technical interview. Gemini AI will ask probing questions calibrated to your experience and evaluate your answers against production rubrics.
+                      </p>
+                    </div>
+
                     <Button
                       size="lg"
                       onClick={() => handleStartNewInterview()}
                       isLoading={isStarting}
-                      className="gap-2.5 font-bold shadow-xl shadow-indigo-600/30 text-sm h-12 px-7"
+                      className="w-full sm:w-auto h-12 px-7 rounded-xl gap-2.5 font-bold text-sm shrink-0 bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-lg shadow-indigo-600/30 hover:shadow-indigo-500/50 hover:scale-[1.02] active:scale-[0.98] transition-all relative z-10"
                     >
                       <Play className="h-4 w-4 fill-current" />
-                      Start Baseline Interview
+                      Start Live Interview
+                      <ArrowRight className="h-4 w-4 ml-0.5" />
                     </Button>
-                    <Link href="/report/demo-session">
-                      <Button variant="outline" size="sm" className="w-full gap-2 text-xs h-10 border-indigo-900/40 hover:border-indigo-500/50">
-                        <ExternalLink className="h-3.5 w-3.5 text-indigo-400" />
-                        Inspect Sample Demo Report
+                  </div>
+                )}
+
+                {/* Recent Evaluation Reports */}
+                <Card className="rounded-2xl border border-slate-800/80 bg-[#0c1427]/90 shadow-md overflow-hidden">
+                  <CardHeader className="p-6 border-b border-slate-800/80">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-base sm:text-lg">Recent Evaluation Scorecards</CardTitle>
+                        <CardDescription className="text-xs mt-0.5">Synthesized scorecards from your completed technical sessions.</CardDescription>
+                      </div>
+                      <Button size="sm" variant="outline" onClick={() => setActiveTab("history")} className="text-xs gap-1.5 h-8.5 rounded-xl border-slate-700">
+                        View All ({reports.length})
+                        <ChevronRight className="h-3 w-3" />
                       </Button>
-                    </Link>
-                  </div>
-                </div>
-              </div>
-
-              {/* 3-Step Guided Roadmap */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="p-5.5 hover:border-indigo-500/40 transition-all duration-300">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-950/60">
-                      01
                     </div>
-                    <h3 className="font-bold text-white text-base">Role Calibration</h3>
-                  </div>
-                  <p className="text-xs text-slate-300 leading-relaxed">
-                    Configure your engineering track, experience level, and optional resume. Questions adapt directly to your profile.
-                  </p>
-                </Card>
-
-                <Card className="p-5.5 hover:border-indigo-500/40 transition-all duration-300">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-700 text-white font-bold text-xs shadow-md shadow-purple-950/60">
-                      02
-                    </div>
-                    <h3 className="font-bold text-white text-base">Adaptive AI Inquiry</h3>
-                  </div>
-                  <p className="text-xs text-slate-300 leading-relaxed">
-                    Answer real-time technical questions. Strong reasoning unlocks deeper edge cases; gaps trigger targeted conceptual follow-ups.
-                  </p>
-                </Card>
-
-                <Card className="p-5.5 hover:border-indigo-500/40 transition-all duration-300">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 text-white font-bold text-xs shadow-md shadow-emerald-950/60">
-                      03
-                    </div>
-                    <h3 className="font-bold text-white text-base">Evidence Scorecard</h3>
-                  </div>
-                  <p className="text-xs text-slate-300 leading-relaxed">
-                    Receive a synthesis with quote citations, category readiness benchmarks, hiring recommendations, and actionable roadmap steps.
-                  </p>
-                </Card>
-              </div>
-
-              {/* Target Competencies Preview (Honest Zero State) */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-base text-white">Target Competencies for {roleName}</CardTitle>
-                      <CardDescription>
-                        Key subject areas evaluated during your live adaptive interview sessions.
-                      </CardDescription>
-                    </div>
-                    <Badge variant="outline" className="text-[11px]">0 Sessions Logged</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {expectedSkills.map((skill) => (
-                      <div
-                        key={skill}
-                        className="flex items-center justify-between p-3.5 rounded-xl border border-[#1e2d4f] bg-[#0a0f1d] text-xs hover:border-indigo-700/50 transition-colors"
-                      >
-                        <span className="font-medium text-slate-200">{skill}</span>
-                        <span className="text-[10px] text-slate-500 font-mono">Benchmark Pending</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          ) : (
-            /* RETURNING CANDIDATE EXPERIENCE WITH REAL EVALUATIONS */
-            <div className="space-y-6">
-              {/* CANDIDATE COMPANY APPLICATION & SHORTLIST DECISION BANNER (GLASSMORPHISM) */}
-              {!isRecruiter && (() => {
-                const candidateLatestReport = reports.length > 0 ? reports[0] : null;
-                const candidateEffectiveStatus = (pipelineShortlists[candidateLatestReport?.sessionId || ""] ?? candidateLatestReport?.shortlistStatus ?? "pending") as ShortlistStatus;
-                const candidateEffectiveNotes = pipelineNotes[candidateLatestReport?.sessionId || ""] ?? candidateLatestReport?.shortlistNotes;
-
-                return (
-                  <div className="relative rounded-3xl border border-white/10 bg-gradient-to-r from-[#0c1428]/95 via-[#0e162d]/90 to-[#18112e]/95 backdrop-blur-2xl p-6 sm:p-7 shadow-2xl shadow-indigo-950/60 overflow-hidden">
-                    <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent" />
-                    <div className="absolute -top-10 -right-10 w-60 h-60 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-
-                    <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
-                      <div className="space-y-3 max-w-2xl">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-[#121c38] text-indigo-300 border border-indigo-700/40">
-                            <Building2 className="h-3.5 w-3.5 text-indigo-400" />
-                            Reviewing Company: TechCorp Global
-                          </span>
-                          <span className="text-xs text-slate-400 font-mono">
-                            Hiring Lead: Sarah Jenkins
-                          </span>
-                        </div>
-
-                        {candidateEffectiveStatus === "shortlisted" && (
-                          <>
-                            <div className="flex items-center gap-2">
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-950/90 text-emerald-300 border border-emerald-500/60 shadow-lg shadow-emerald-950/60">
-                                <Star className="h-3.5 w-3.5 text-emerald-400 fill-emerald-400" />
-                                Application Shortlisted ⭐
-                              </span>
-                              <Badge variant="success" className="text-[10px]">Decision Confirmed</Badge>
-                            </div>
-                            <h2 className="text-2xl font-extrabold text-white tracking-tight">
-                              Congratulations, {displayName}! You have been Shortlisted.
-                            </h2>
-                            <p className="text-sm text-slate-300 leading-relaxed">
-                              Your interview performance met the hiring bar for the {roleName} role. Sarah Jenkins has advanced your profile to the candidate shortlist.
-                            </p>
-                          </>
-                        )}
-
-                        {candidateEffectiveStatus === "under-review" && (
-                          <>
-                            <div className="flex items-center gap-2">
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-950/90 text-amber-300 border border-amber-500/60 shadow-lg shadow-amber-950/60">
-                                <Clock3 className="h-3.5 w-3.5 text-amber-400" />
-                                Under Active Review ⏳
-                              </span>
-                            </div>
-                            <h2 className="text-2xl font-extrabold text-white tracking-tight">
-                              Interview Record Under Review by Company Head
-                            </h2>
-                            <p className="text-sm text-slate-300 leading-relaxed">
-                              Your interview transcript, answers, and competency metrics are currently being evaluated by the TechCorp Global talent committee.
-                            </p>
-                          </>
-                        )}
-
-                        {candidateEffectiveStatus === "rejected" && (
-                          <>
-                            <div className="flex items-center gap-2">
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-950/90 text-rose-300 border border-rose-600/50">
-                                <XCircle className="h-3.5 w-3.5 text-rose-400" />
-                                Application Feedback Provided
-                              </span>
-                            </div>
-                            <h2 className="text-2xl font-extrabold text-white tracking-tight">
-                              Interview Completed — Diagnostic Review
-                            </h2>
-                            <p className="text-sm text-slate-300 leading-relaxed">
-                              Thank you for completing the technical assessment. Review your competency breakdown below to target specific growth areas for future openings.
-                            </p>
-                          </>
-                        )}
-
-                        {candidateEffectiveStatus === "pending" && (
-                          <>
-                            <div className="flex items-center gap-2">
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-indigo-950/90 text-indigo-300 border border-indigo-700/50">
-                                <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
-                                Interview Record Ready
-                              </span>
-                            </div>
-                            <h2 className="text-2xl font-extrabold text-white tracking-tight">
-                              Welcome to Your Candidate Portal
-                            </h2>
-                            <p className="text-sm text-slate-300 leading-relaxed">
-                              Your evaluation history and scores are linked to this account and accessible only to you and authorized company evaluators.
-                            </p>
-                          </>
-                        )}
-
-                        {/* Recruiter Notes (if provided by company head) */}
-                        {candidateEffectiveNotes && (
-                          <div className="mt-3 p-3.5 rounded-2xl bg-white/[0.04] border border-white/10 backdrop-blur-md">
-                            <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider mb-1 flex items-center gap-1">
-                              <CheckCircle2 className="h-3.5 w-3.5 text-indigo-400" />
-                              Hiring Manager Notes (Sarah Jenkins):
-                            </p>
-                            <p className="text-xs text-slate-200 italic font-medium leading-relaxed">
-                              &ldquo;{candidateEffectiveNotes}&rdquo;
-                            </p>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex flex-col sm:flex-row md:flex-col gap-2.5 shrink-0">
-                        {candidateLatestReport && (
-                          <Link href={`/report/${candidateLatestReport.sessionId}`}>
-                            <Button size="sm" variant="secondary" className="gap-2 text-xs h-9 w-full">
-                              <FileText className="h-4 w-4 text-indigo-400" />
-                              View Full Audit Report
+                  </CardHeader>
+                  <CardContent className="p-6 space-y-3.5">
+                    {reports.length === 0 ? (
+                      <div className="text-center py-10 text-slate-400 text-xs">
+                        <FileText className="h-9 w-9 mx-auto text-slate-600 mb-2.5" />
+                        <p className="text-sm font-medium text-slate-300">No evaluation scorecards yet.</p>
+                        <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                          Launch your first live interview to generate complete rubric performance diagnostics and gap roadmaps.
+                        </p>
+                        {!hasConfiguredResume ? (
+                          <Link href="/setup">
+                            <Button size="sm" variant="outline" className="mt-4 text-xs gap-1.5 h-9 px-4 rounded-xl border-amber-500/40 text-amber-300 hover:bg-amber-950/30">
+                              <Upload className="h-3.5 w-3.5" />
+                              Upload Resume / CV First
                             </Button>
                           </Link>
-                        )}
-                        <Button
-                          size="sm"
-                          onClick={() => handleStartNewInterview()}
-                          className="gap-2 text-xs h-9 w-full bg-indigo-600 hover:bg-indigo-500 font-bold shadow-lg shadow-indigo-600/30"
-                        >
-                          <Play className="h-3.5 w-3.5 fill-current" />
-                          Retake Technical Interview
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Quick Launch & Competency Readiness Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Left: Quick Launch Card */}
-                <Card className="lg:col-span-2 border-indigo-900/40 bg-gradient-to-br from-[#10182b] via-[#0c1222] to-[#070b14]">
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <Badge variant="indigo" className="gap-1">
-                        <Sparkles className="h-3 w-3" />
-                        Next Recommended Action
-                      </Badge>
-                      <span className="text-xs text-slate-400 font-mono">Adaptive AI Session</span>
-                    </div>
-                    <CardTitle className="text-xl text-white mt-1">
-                      Execute Live Technical Evaluation for {roleName}
-                    </CardTitle>
-                    <CardDescription>
-                      Engage in real-time adaptive questioning that dynamically probes your architectural decisions, trade-offs, and failure recovery.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="rounded-xl border border-[#1e2d4f] bg-[#070b14]/70 p-4 space-y-2 text-xs">
-                      <div className="flex items-center justify-between text-slate-300 font-medium">
-                        <span>Session Calibration</span>
-                        <span className="text-indigo-400 font-mono font-semibold">{setup.interviewFocus.replace("-", " ").toUpperCase()}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-slate-400">
-                        <span>Format & Duration</span>
-                        <span>{setup.interviewLength || 20} Minutes (~3–4 dynamic questions)</span>
-                      </div>
-                      <div className="flex items-center justify-between text-slate-400">
-                        <span>Engine Mode</span>
-                        <span className="text-emerald-400 font-medium flex items-center gap-1">
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          Gemini AI Real-time Evaluation
-                        </span>
-                      </div>
-                    </div>
-                  </CardContent>
-                  <CardFooter className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-                    <Button
-                      onClick={() => handleStartNewInterview()}
-                      isLoading={isStarting}
-                      className="w-full sm:w-auto gap-2 shadow-lg shadow-indigo-600/25 font-bold h-10 px-5"
-                    >
-                      <Play className="h-4 w-4 fill-current" />
-                      Start Live Session Now
-                    </Button>
-                    <Link href="/setup" className="text-xs text-slate-400 hover:text-indigo-300 transition-colors">
-                      Switch Target Role or Focus →
-                    </Link>
-                  </CardFooter>
-                </Card>
-
-                {/* Right: Key Skills Readiness Radar */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm text-white">Competency Diagnostics</CardTitle>
-                    <CardDescription>
-                      Synthesized across {reports.length} verified interview evaluation{reports.length > 1 ? "s" : ""}.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3.5">
-                    {analytics.competencies.slice(0, 4).map((m) => (
-                      <div key={m.category} className="space-y-1.5">
-                        <div className="flex justify-between text-xs">
-                          <span className="text-slate-300 font-medium truncate max-w-[170px]">{m.category}</span>
-                          <span className="text-indigo-400 font-mono font-semibold">{m.avgScore}%</span>
-                        </div>
-                        <Progress
-                          value={m.avgScore}
-                          indicatorColor={m.avgScore >= 90 ? "emerald" : m.avgScore >= 82 ? "indigo" : "amber"}
-                          size="sm"
-                        />
-                      </div>
-                    ))}
-                  </CardContent>
-                  <CardFooter className="pt-2">
-                    <button
-                      onClick={() => setActiveTab("skills")}
-                      className="w-full text-xs text-center text-slate-400 hover:text-indigo-300 transition-colors font-medium"
-                    >
-                      View Full Competency Breakdown →
-                    </button>
-                  </CardFooter>
-                </Card>
-              </div>
-
-              {/* Score Trend (Displayed only when 2+ historical evaluations exist) */}
-              {analytics.scoreTrend && (
-                <Card className="p-5 hover:border-indigo-500/40 transition-all">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-bold text-white text-base">Historical Evaluation Trajectory</h3>
-                        <Badge
-                          variant={analytics.scoreTrend.isUp ? "success" : "default"}
-                          className="font-mono text-xs gap-1"
-                        >
-                          {analytics.scoreTrend.isUp ? (
-                            <TrendingUp className="h-3 w-3" />
-                          ) : (
-                            <TrendingDown className="h-3 w-3" />
-                          )}
-                          {analytics.scoreTrend.delta >= 0 ? `+${analytics.scoreTrend.delta}%` : `${analytics.scoreTrend.delta}%`} vs previous
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-slate-400">
-                        Score progression comparison across consecutive evaluation sessions.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-1">
-                    {reports.slice(0, 4).map((r, i) => (
-                      <div
-                        key={r.sessionId}
-                        className="p-4 rounded-xl border border-[#1e2d4f] bg-[#0a0f1d] space-y-2 hover:border-indigo-700/50 transition-all"
-                      >
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="text-slate-400 font-mono text-[10px]">
-                            {i === 0 ? "Latest Session" : `Session -${i}`}
-                          </span>
-                          <span className="font-bold text-indigo-300 font-mono text-base">
-                            {r.overallScore}%
-                          </span>
-                        </div>
-                        <p className="text-xs font-semibold text-white truncate">{r.targetRole}</p>
-                        <p className="text-[10px] text-slate-500 font-mono">{r.completedAt}</p>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              )}
-
-              {/* Single Evaluation Note */}
-              {reports.length === 1 && (
-                <div className="rounded-2xl border border-indigo-900/40 bg-gradient-to-r from-indigo-950/40 via-[#0c1222] to-[#070b14] p-4.5 text-xs text-slate-300 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-lg bg-indigo-950 flex items-center justify-center text-indigo-400 border border-indigo-800/60 shrink-0">
-                      <BarChart3 className="h-4 w-4" />
-                    </div>
-                    <span>
-                      <strong>1 Evaluation Recorded:</strong> Complete a second interview to unlock historical score progression trends and trajectory comparison.
-                    </span>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => handleStartNewInterview()}
-                    className="shrink-0 text-xs gap-1.5"
-                  >
-                    <PlusCircle className="h-3.5 w-3.5" />
-                    Take 2nd Interview
-                  </Button>
-                </div>
-              )}
-
-              {/* Recent Completed Evaluations Preview */}
-              <div className="space-y-3.5">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                    Recent Completed Evaluations
-                  </h2>
-                  <button
-                    onClick={() => setActiveTab("history")}
-                    className="text-xs text-indigo-400 hover:text-indigo-300 font-medium"
-                  >
-                    View all ({reports.length}) →
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {reports.slice(0, 2).map((rep) => (
-                    <Card
-                      key={rep.sessionId}
-                      className="hover:border-indigo-600/50 transition-all bg-[#0f172a]/95 hover:-translate-y-0.5"
-                    >
-                      <CardHeader className="pb-2">
-                        <div className="flex items-center justify-between">
-                          <Badge variant={rep.overallScore >= 88 ? "success" : rep.overallScore >= 72 ? "indigo" : "default"}>
-                            {rep.overallScore}% Score • {rep.verdict}
-                          </Badge>
-                          <span className="text-xs text-slate-400 font-mono">
-                            {rep.completedAt}
-                          </span>
-                        </div>
-                        <CardTitle className="text-base text-white mt-1">
-                          {rep.targetRole}
-                        </CardTitle>
-                        <CardDescription>
-                          {rep.answerRecords.length} questions evaluated • {rep.durationMinutes} min session
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="text-xs text-slate-300">
-                        <p className="line-clamp-2 text-slate-400">
-                          <strong className="text-emerald-400 font-medium">Demonstrated: </strong>
-                          {rep.strengths[0] || "Solid architectural grasp"}
-                        </p>
-                      </CardContent>
-                      <CardFooter className="pt-2">
-                        <Link href={`/report/${rep.sessionId}`} className="w-full">
-                          <Button variant="outline" size="sm" className="w-full gap-2 text-xs border-indigo-900/40 hover:border-indigo-500/60">
-                            Inspect Verified Report
-                            <ArrowRight className="h-3.5 w-3.5" />
+                        ) : (
+                          <Button size="sm" onClick={() => handleStartNewInterview()} className="mt-4 text-xs gap-1.5 h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20">
+                            <Play className="h-3.5 w-3.5 fill-current" />
+                            Launch First Interview
                           </Button>
-                        </Link>
-                      </CardFooter>
-                    </Card>
-                  ))}
-                </div>
+                        )}
+                      </div>
+                    ) : (
+                      reports.slice(0, 3).map((rep) => (
+                        <div key={rep.sessionId} className="p-4 sm:p-5 rounded-xl border border-slate-800/80 bg-[#090e1a]/80 hover:bg-[#0f172a] hover:border-slate-700 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2.5 flex-wrap">
+                              <span className="font-semibold text-sm text-white">{rep.targetRole}</span>
+                              <Badge variant={rep.overallScore >= 85 ? "success" : rep.overallScore >= 70 ? "indigo" : "warning"} className="text-xs font-mono py-0.5 px-2">
+                                {rep.overallScore}% Score
+                              </Badge>
+                              <Badge variant="outline" className="text-xs">{rep.verdict}</Badge>
+                            </div>
+                            <span className="text-xs text-slate-400 block mt-1">
+                              Completed {rep.completedAt} · {rep.durationMinutes}m duration · {rep.answerRecords.length} questions
+                            </span>
+                          </div>
+                          <Link href={`/report/${rep.sessionId}`}>
+                            <Button size="sm" variant="outline" className="text-xs gap-1.5 h-8.5 px-3.5 rounded-xl border-slate-700 text-slate-300 hover:text-white">
+                              <FileText className="h-3.5 w-3.5 text-indigo-400" />
+                              View Report
+                            </Button>
+                          </Link>
+                        </div>
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
               </div>
-            </div>
-          )}
-
-          {/* 4. SCORING SCALE EXPLANATION (Standardized Evaluation Rubric) */}
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-indigo-400" />
-                <CardTitle className="text-sm text-white">Evaluation Scale & Hiring Rubric Standards</CardTitle>
-              </div>
-              <CardDescription>
-                How InterviewIQ synthesizes candidate scores against industry engineering benchmarks.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 text-xs">
-                <div className="p-4 rounded-xl border border-emerald-800/40 bg-emerald-950/20 space-y-1.5 hover:border-emerald-700/60 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-emerald-300 text-sm">88% – 100%</span>
-                    <Badge variant="success" className="text-[10px]">Strong Hire</Badge>
-                  </div>
-                  <p className="text-slate-200 font-semibold">Mastery & Architecture</p>
-                  <p className="text-slate-400 text-[11px] leading-relaxed">
-                    Proactively addresses trade-offs, concurrency bottlenecks, and failure edge cases with precise technical terminology.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-xl border border-indigo-800/40 bg-indigo-950/20 space-y-1.5 hover:border-indigo-700/60 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-indigo-300 text-sm">72% – 87%</span>
-                    <Badge variant="indigo" className="text-[10px]">Hire Recommendation</Badge>
-                  </div>
-                  <p className="text-slate-200 font-semibold">Proficient & Practical</p>
-                  <p className="text-slate-400 text-[11px] leading-relaxed">
-                    Solid implementation ability and clear conceptual grasp; minor gaps in scalability extremes or recovery degradation.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-xl border border-amber-800/40 bg-amber-950/20 space-y-1.5 hover:border-amber-700/60 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-amber-300 text-sm">Below 72%</span>
-                    <Badge variant="default" className="text-[10px]">Additional Review</Badge>
-                  </div>
-                  <p className="text-slate-200 font-semibold">Foundational Review</p>
-                  <p className="text-slate-400 text-[11px] leading-relaxed">
-                    Answers lack depth or miss essential core keywords; targeted practice recommended to solidify fundamental patterns.
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB 2: INTERVIEW HISTORY                                                  */}
-      {/* ========================================================================= */}
-      {activeTab === "history" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-bold text-white">
-                Evaluation Archives & Audit Logs
-              </h2>
-              <p className="text-xs text-slate-400">
-                All completed sessions stored locally in this browser account.
-              </p>
-            </div>
-            <Button size="sm" onClick={() => handleStartNewInterview()} className="gap-2">
-              <PlusCircle className="h-4 w-4" />
-              New Interview
-            </Button>
+            )}
           </div>
+        )}
 
-          {reports.length === 0 ? (
-            <EmptyState
-              title="No interview sessions recorded yet"
-              description="Launch your first adaptive technical session to populate your evaluation history."
-              actionLabel="Launch First Interview"
-              onAction={() => handleStartNewInterview()}
-            />
-          ) : (
-            <div className="space-y-3">
-              {reports.map((rep) => (
-                <Card
-                  key={rep.sessionId}
-                  className="hover:border-indigo-700/60 transition-colors"
-                >
-                  <div className="p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="space-y-1.5 max-w-2xl">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-bold text-white text-base">
-                          {rep.targetRole}
-                        </span>
-                        <Badge variant={rep.overallScore >= 88 ? "success" : rep.overallScore >= 72 ? "indigo" : "default"}>
-                          {rep.overallScore}% Score • {rep.verdict}
+
+        {/* ========================================================================= */}
+        {/* TAB 3: EVALUATION HISTORY (CANDIDATE OR RECRUITER)                       */}
+        {/* ========================================================================= */}
+        {activeTab === "history" && (
+          <div className="space-y-4">
+            {reports.length === 0 ? (
+              <EmptyState
+                title="No interview sessions recorded yet"
+                description="Launch your first adaptive technical session to populate your evaluation history."
+                actionLabel="Launch First Interview"
+                onAction={() => handleStartNewInterview()}
+              />
+            ) : (
+              reports.map((rep) => (
+                <Card key={rep.sessionId} className="rounded-2xl border border-slate-800/80 bg-[#0c1427]/90 shadow-md hover:border-slate-700/80 transition-all overflow-hidden">
+                  <div className="p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+                    <div className="space-y-2 max-w-2xl">
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <span className="font-bold text-white text-base tracking-tight">{rep.targetRole}</span>
+                        <Badge variant={rep.overallScore >= 85 ? "success" : rep.overallScore >= 70 ? "indigo" : "warning"} className="font-mono text-xs py-0.5 px-2">
+                          {rep.overallScore}% Score
                         </Badge>
-                        <span className="text-xs text-slate-400 font-mono">
-                          Ref: {rep.sessionId}
-                        </span>
+                        <Badge variant="outline" className="text-xs">{rep.verdict}</Badge>
+                        <span className="text-xs text-slate-400 font-mono">Ref: {rep.sessionId}</span>
                       </div>
                       <p className="text-xs text-slate-400">
-                        Completed on {rep.completedAt} • {rep.durationMinutes} min session • {rep.answerRecords.length} questions evaluated
+                        Completed {rep.completedAt} · {rep.durationMinutes}m duration · {rep.answerRecords.length} questions evaluated
                       </p>
                       {rep.strengths && rep.strengths[0] && (
                         <p className="text-xs text-slate-300">
@@ -1433,389 +1053,179 @@ export default function DashboardPage() {
                         </p>
                       )}
                     </div>
-
-                    <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                    <div className="flex items-center gap-2.5 shrink-0 w-full sm:w-auto">
                       <Link href={`/report/${rep.sessionId}`} className="w-full sm:w-auto">
-                        <Button size="sm" variant="secondary" className="gap-2 w-full text-xs">
-                          <FileText className="h-4 w-4 text-indigo-400" />
-                          View Full Report
+                        <Button size="sm" variant="secondary" className="gap-2 text-xs h-9 px-4 rounded-xl w-full border-slate-700">
+                          <FileText className="h-3.5 w-3.5 text-indigo-400" />
+                          View Dossier
                         </Button>
                       </Link>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleStartNewInterview(rep.targetRole as TargetRole)}
-                        className="gap-1.5 text-xs border-indigo-900/40 hover:border-indigo-600/60"
-                      >
-                        <RefreshCw className="h-3.5 w-3.5 text-slate-400" />
-                        Retake
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB 3: SKILLS & READINESS                                                 */}
-      {/* ========================================================================= */}
-      {activeTab === "skills" && (
-        <div className="space-y-6">
-          {reports.length === 0 ? (
-            <Card className="p-8 text-center space-y-4">
-              <div className="h-12 w-12 rounded-2xl bg-indigo-950/70 border border-indigo-800/40 flex items-center justify-center text-indigo-400 mx-auto">
-                <BrainCircuit className="h-6 w-6" />
-              </div>
-              <div className="space-y-1 max-w-md mx-auto">
-                <h3 className="text-base font-bold text-white">Competency Diagnostics Pending</h3>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Granular skill analytics and targeted learning roadmaps are synthesized from your actual responses during live interviews. Complete an interview to unlock this data.
-                </p>
-              </div>
-              <Button
-                size="sm"
-                onClick={() => handleStartNewInterview()}
-                className="gap-2"
-              >
-                <Play className="h-3.5 w-3.5 fill-current" />
-                Start Calibration Interview
-              </Button>
-            </Card>
-          ) : (
-            <>
-              {/* Competency Grid */}
-              <Card>
-                <CardHeader>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                      <CardTitle>Skill Matrix & Proficiency Diagnostics</CardTitle>
-                      <CardDescription>
-                        Granular competencies calibrated against your actual answers across {reports.length} evaluation session{reports.length > 1 ? "s" : ""}.
-                      </CardDescription>
-                    </div>
-
-                    {/* Truthful 3-Tier Category Distribution Pills */}
-                    <div className="flex items-center gap-2 flex-wrap text-xs">
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/70 border border-emerald-500/50 text-emerald-300 font-semibold shadow-sm">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                        Demonstrated: {analytics.statusCounts.demonstrated}
-                      </span>
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-950/70 border border-amber-500/50 text-amber-300 font-semibold shadow-sm">
-                        <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
-                        Claimed but Unvalidated: {analytics.statusCounts.claimedUnvalidated}
-                      </span>
-                      {analytics.statusCounts.notAssessed > 0 && (
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900/90 border border-slate-700/60 text-slate-300 font-semibold shadow-sm">
-                          <FileQuestion className="h-3.5 w-3.5 text-slate-400" />
-                          Not Yet Assessed: {analytics.statusCounts.notAssessed}
-                        </span>
+                      {!isRecruiter && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleStartNewInterview(rep.targetRole as TargetRole)}
+                          className="gap-2 text-xs h-9 px-3.5 rounded-xl border-slate-700 text-slate-300 hover:text-white"
+                        >
+                          <RefreshCw className="h-3.5 w-3.5 text-slate-400" />
+                          Retake
+                        </Button>
                       )}
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                </Card>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 4: SKILLS & PROGRESS (CANDIDATE)                                      */}
+        {/* ========================================================================= */}
+        {activeTab === "skills" && (
+          <div className="space-y-6">
+            <Card className="rounded-2xl border border-slate-800/80 bg-[#0c1427]/90 shadow-md overflow-hidden">
+              <CardHeader className="p-6 border-b border-slate-800/80">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-base sm:text-lg">Skill Matrix & Proficiency Diagnostics</CardTitle>
+                    <CardDescription className="text-xs mt-0.5">
+                      Granular competencies calibrated against your actual answers across {reports.length} evaluation session{reports.length > 1 ? "s" : ""}.
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap text-xs">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/70 border border-emerald-500/50 text-emerald-300 font-semibold">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                      Demonstrated: {analytics.statusCounts.demonstrated}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-950/70 border border-amber-500/50 text-amber-300 font-semibold">
+                      <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
+                      Claimed: {analytics.statusCounts.claimedUnvalidated}
+                    </span>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6 space-y-4">
+                {analytics.competencies.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-8">Complete your first interview to generate skill diagnostics.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {analytics.competencies.map((metric) => (
-                      <div
-                        key={metric.category}
-                        className="space-y-2.5 p-4.5 rounded-2xl border border-[#1e2d4f] bg-[#0a0f1d] hover:border-indigo-700/50 transition-colors"
-                      >
+                      <div key={metric.category} className="p-4 sm:p-5 rounded-xl border border-slate-800/80 bg-[#090e1a]/80 hover:bg-[#0f172a] hover:border-slate-700 transition-all space-y-2.5">
                         <div className="flex justify-between items-start gap-2">
                           <div>
-                            <span className="font-bold text-white text-sm block">
-                              {metric.category}
-                            </span>
-                            <span className="text-[11px] text-slate-400 font-mono">
-                              {metric.count} answer turn{metric.count > 1 ? "s" : ""} evaluated
-                            </span>
+                            <span className="font-semibold text-sm text-white block">{metric.category}</span>
+                            <span className="text-xs text-slate-400 font-mono mt-0.5 block">{metric.count} turn(s) evaluated</span>
                           </div>
-
-                          <div className="flex flex-col items-end gap-1">
-                            <Badge
-                              variant={metric.avgScore >= 90 ? "success" : metric.avgScore >= 82 ? "indigo" : "default"}
-                            >
-                              {metric.level} • {metric.avgScore}%
-                            </Badge>
-                            {/* 3-Tier Status Category Badge */}
-                            {metric.status === "demonstrated" && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-500/50">
-                                <CheckCircle2 className="h-3 w-3 text-emerald-400" />
-                                Demonstrated
-                              </span>
-                            )}
-                            {metric.status === "claimed_unvalidated" && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-500/50">
-                                <AlertTriangle className="h-3 w-3 text-amber-400" />
-                                Claimed but Unvalidated
-                              </span>
-                            )}
-                            {metric.status === "not_assessed" && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-slate-900/90 text-slate-300 border border-slate-700/60">
-                                <FileQuestion className="h-3 w-3 text-slate-400" />
-                                Not Yet Assessed
-                              </span>
-                            )}
-                          </div>
+                          <Badge variant={metric.avgScore >= 85 ? "success" : metric.avgScore >= 70 ? "indigo" : "warning"} className="font-mono text-xs py-0.5 px-2">
+                            {metric.avgScore}%
+                          </Badge>
                         </div>
-                        <Progress
-                          value={metric.avgScore}
-                          indicatorColor={metric.avgScore >= 90 ? "emerald" : metric.avgScore >= 82 ? "indigo" : "amber"}
-                          size="md"
-                        />
-                        <p className="text-[11px] text-slate-400 pt-0.5">
-                          Evaluated with verified keyword alignment and technical depth.
-                        </p>
+                        <Progress value={metric.avgScore} indicatorColor={metric.avgScore >= 85 ? "emerald" : metric.avgScore >= 70 ? "indigo" : "amber"} size="sm" />
                       </div>
                     ))}
                   </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
-                  {/* 5. PERSONALIZED PRACTICE RECOMMENDATIONS */}
-                  {analytics.allRecommendations.length > 0 && (
-                    <div className="rounded-2xl border border-indigo-800/40 bg-indigo-950/20 p-5.5 space-y-3.5">
-                      <div className="flex items-center gap-2 text-indigo-300 font-bold text-sm">
-                        <Award className="h-4.5 w-4.5 text-indigo-400" />
-                        <span>Data-Backed Practice Recommendations</span>
-                      </div>
-                      <p className="text-xs text-slate-400">
-                        Derived from actual evaluation gaps identified in your recent interview reports:
-                      </p>
-                      <div className="space-y-2.5">
-                        {analytics.allRecommendations.map((item, idx) => (
-                          <div
-                            key={idx}
-                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-[#1e2d4f] bg-[#0a0f1d] text-xs hover:border-indigo-700/50 transition-colors"
-                          >
-                            <span className="text-slate-200 leading-relaxed font-medium">
-                              • {item}
-                            </span>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleStartNewInterview()}
-                              className="shrink-0 text-xs h-8 border-indigo-900/50 hover:border-indigo-500/60"
-                            >
-                              Practice Drill →
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB 4: PROFILE SETTINGS                                                   */}
-      {/* ========================================================================= */}
-      {activeTab === "settings" && (
-        <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Candidate Profile & Calibration Settings</CardTitle>
-              <CardDescription>
-                Active session configuration and ingested resume profile metadata.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl border border-[#1e2d4f] bg-[#0a0f1d]">
-                  <span className="text-slate-400 block mb-1 font-medium">Candidate Name</span>
-                  <span className="font-bold text-white text-sm">
-                    {setup.candidateName || (user ? user.name : "Candidate")}
-                  </span>
-                </div>
-                <div className="p-4 rounded-xl border border-[#1e2d4f] bg-[#0a0f1d]">
-                  <span className="text-slate-400 block mb-1 font-medium">Target Role</span>
-                  <span className="font-bold text-indigo-300 text-sm">
-                    {roleName}
-                  </span>
-                </div>
-                <div className="p-4 rounded-xl border border-[#1e2d4f] bg-[#0a0f1d]">
-                  <span className="text-slate-400 block mb-1 font-medium">Seniority Calibration</span>
-                  <span className="font-bold text-white text-sm capitalize">
-                    {setup.experienceLevel} Level
-                  </span>
-                </div>
-                <div className="p-4 rounded-xl border border-[#1e2d4f] bg-[#0a0f1d]">
-                  <span className="text-slate-400 block mb-1 font-medium">Resume File</span>
-                  <span className="font-bold text-white text-sm truncate block">
-                    {setup.resumeFileName || "Default Candidate Profile"}
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Link href="/setup">
-                <Button size="sm" variant="secondary" className="gap-2">
-                  <Settings className="h-4 w-4" />
-                  Modify Calibration in Setup
-                </Button>
-              </Link>
-            </CardFooter>
-          </Card>
-
-          {/* Account & Session Card */}
-          <Card className="border-[#1e2d4f]">
-            <CardHeader>
-              <CardTitle>Account & Authentication Session</CardTitle>
-              <CardDescription>
-                Manage your credentials and active session state.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 text-xs">
-              {user ? (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-indigo-950/60 bg-[#0a0f1d]">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-white text-sm">{user.name}</span>
-                      <Badge variant="indigo" className="text-[10px] capitalize">{user.role}</Badge>
-                    </div>
-                    <p className="text-slate-400 font-mono">{user.email}</p>
-                    <p className="text-[11px] text-emerald-400 flex items-center gap-1 mt-1">
-                      <CheckCircle2 className="h-3 w-3" /> Secure session cookie active
-                    </p>
+        {/* ========================================================================= */}
+        {/* TAB 5: PROFILE & CONFIGURATION (CANDIDATE)                                */}
+        {/* ========================================================================= */}
+        {activeTab === "settings" && (
+          <div className="space-y-6">
+            <Card className="rounded-2xl border border-slate-800/80 bg-[#0c1427]/90 shadow-md overflow-hidden">
+              <CardHeader className="p-6 border-b border-slate-800/80">
+                <CardTitle className="text-base sm:text-lg">Candidate Profile & Calibration</CardTitle>
+                <CardDescription className="text-xs mt-0.5">Your current engineering track and interview calibration parameters.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-6 space-y-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                  <div className="p-4 rounded-xl border border-slate-800/80 bg-[#090e1a]/80 space-y-1">
+                    <span className="text-slate-400 font-semibold block uppercase tracking-wider text-[10px]">Candidate Name</span>
+                    <span className="text-sm font-bold text-white block">{displayName}</span>
                   </div>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={handleLogout}
-                    className="gap-2 text-xs shrink-0 self-start sm:self-auto"
-                  >
-                    <LogOut className="h-4 w-4" />
-                    Log Out of Account
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-[#1e2d4f] bg-[#0a0f1d]">
-                  <div className="space-y-1">
-                    <p className="font-semibold text-white text-sm">Guest Sandbox Mode</p>
-                    <p className="text-slate-400">
-                      You are using a browser-local demo session. Sign in to permanently link evaluation reports.
-                    </p>
+                  <div className="p-4 rounded-xl border border-slate-800/80 bg-[#090e1a]/80 space-y-1">
+                    <span className="text-slate-400 font-semibold block uppercase tracking-wider text-[10px]">Target Track</span>
+                    <span className="text-sm font-bold text-indigo-300 block">{roleName}</span>
                   </div>
-                  <Link href="/login" className="shrink-0">
-                    <Button size="sm" className="gap-2 text-xs">
-                      Sign In / Register
-                      <ArrowRight className="h-3.5 w-3.5" />
+                  <div className="p-4 rounded-xl border border-slate-800/80 bg-[#090e1a]/80 space-y-1">
+                    <span className="text-slate-400 font-semibold block uppercase tracking-wider text-[10px]">Seniority Level</span>
+                    <span className="text-sm font-bold text-white block capitalize">{setup.experienceLevel}</span>
+                  </div>
+                  <div className="p-4 rounded-xl border border-slate-800/80 bg-[#090e1a]/80 space-y-1">
+                    <span className="text-slate-400 font-semibold block uppercase tracking-wider text-[10px]">Session Duration</span>
+                    <span className="text-sm font-bold text-white block">{setup.interviewLength || 20} Minutes</span>
+                  </div>
+                </div>
+                <div className="pt-2">
+                  <Link href="/setup">
+                    <Button size="sm" className="gap-2 text-xs h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-md shadow-indigo-600/20">
+                      <Settings className="h-3.5 w-3.5" />
+                      Recalibrate Track & Upload Resume
                     </Button>
                   </Link>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
-      {/* ========================================================================= */}
-      {/* TAB 5: RECRUITER CANDIDATE PIPELINE (COMPANY HEAD ACCESS)                */}
-      {/* ========================================================================= */}
-      {activeTab === "pipeline" && isRecruiter && (() => {
-        const statusMeta: Record<string, { label: string; color: string; icon: React.ReactNode; bg: string }> = {
-          shortlisted:   { label: "Shortlisted",    color: "text-emerald-400", icon: <Star className="h-3.5 w-3.5" />, bg: "bg-emerald-950/80 border-emerald-500/60" },
-          "under-review": { label: "Under Review",   color: "text-amber-400",   icon: <Clock3 className="h-3.5 w-3.5" />, bg: "bg-amber-950/80 border-amber-500/60" },
-          rejected:      { label: "Rejected",       color: "text-rose-400",    icon: <XCircle className="h-3.5 w-3.5" />, bg: "bg-rose-950/80 border-rose-500/60" },
-          pending:       { label: "Pending Review",  color: "text-slate-400",   icon: <Building2 className="h-3.5 w-3.5" />, bg: "bg-slate-900 border-slate-700" },
-        };
+        {/* ========================================================================= */}
+        {/* TAB 6: RECRUITER CANDIDATE PIPELINE OR REVIEWS                            */}
+        {/* ========================================================================= */}
+        {(activeTab === "pipeline" || activeTab === "reviews") && isRecruiter && (() => {
+          const statusMeta: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+            shortlisted:   { label: "Shortlisted",    color: "text-emerald-400", icon: <Star className="h-3 w-3" /> },
+            "under-review": { label: "Under Review",   color: "text-amber-400",   icon: <Clock3 className="h-3 w-3" /> },
+            rejected:      { label: "Rejected",       color: "text-rose-400",    icon: <XCircle className="h-3 w-3" /> },
+            pending:       { label: "Pending Review",  color: "text-slate-400",   icon: <Building2 className="h-3 w-3" /> },
+          };
 
-        const filteredReports = reports.filter((rep) => {
-          const effectiveStatus = (pipelineShortlists[rep.sessionId] ?? rep.shortlistStatus ?? "pending") as ShortlistStatus;
-          const matchesStatus = pipelineFilter === "all" || effectiveStatus === pipelineFilter;
-          const matchesRole = pipelineRoleFilter === "all" || rep.targetRole.toLowerCase().includes(pipelineRoleFilter.toLowerCase());
-          const matchesScore =
-            pipelineScoreFilter === "all" ||
-            (pipelineScoreFilter === "top" && rep.overallScore >= 85) ||
-            (pipelineScoreFilter === "solid" && rep.overallScore >= 75 && rep.overallScore < 85) ||
-            (pipelineScoreFilter === "needs-work" && rep.overallScore < 75);
-          const matchesSearch = !pipelineSearch.trim() || 
-            rep.candidateName.toLowerCase().includes(pipelineSearch.toLowerCase()) ||
-            rep.targetRole.toLowerCase().includes(pipelineSearch.toLowerCase()) ||
-            (rep.shortlistNotes && rep.shortlistNotes.toLowerCase().includes(pipelineSearch.toLowerCase()));
-          return matchesStatus && matchesRole && matchesScore && matchesSearch;
-        });
+          const isReviewsOnly = activeTab === "reviews";
 
-        const pipelineCounts = {
-          all: reports.length,
-          shortlisted: reports.filter((r) => (pipelineShortlists[r.sessionId] ?? r.shortlistStatus ?? "pending") === "shortlisted").length,
-          "under-review": reports.filter((r) => (pipelineShortlists[r.sessionId] ?? r.shortlistStatus ?? "pending") === "under-review").length,
-          rejected: reports.filter((r) => (pipelineShortlists[r.sessionId] ?? r.shortlistStatus ?? "pending") === "rejected").length,
-          pending: reports.filter((r) => (pipelineShortlists[r.sessionId] ?? r.shortlistStatus ?? "pending") === "pending").length,
-        };
+          const filteredReports = reports.filter((rep) => {
+            const effectiveStatus = (pipelineShortlists[rep.sessionId] ?? rep.shortlistStatus ?? "pending") as ShortlistStatus;
+            if (isReviewsOnly && effectiveStatus !== "shortlisted" && effectiveStatus !== "under-review") {
+              return false;
+            }
+            const matchesStatus = pipelineFilter === "all" || effectiveStatus === pipelineFilter;
+            const matchesRole = pipelineRoleFilter === "all" || rep.targetRole.toLowerCase().includes(pipelineRoleFilter.toLowerCase());
+            const matchesScore =
+              pipelineScoreFilter === "all" ||
+              (pipelineScoreFilter === "top" && rep.overallScore >= 85) ||
+              (pipelineScoreFilter === "solid" && rep.overallScore >= 75 && rep.overallScore < 85) ||
+              (pipelineScoreFilter === "needs-work" && rep.overallScore < 75);
+            const matchesSearch = !pipelineSearch.trim() || 
+              rep.candidateName.toLowerCase().includes(pipelineSearch.toLowerCase()) ||
+              rep.targetRole.toLowerCase().includes(pipelineSearch.toLowerCase()) ||
+              (rep.shortlistNotes && rep.shortlistNotes.toLowerCase().includes(pipelineSearch.toLowerCase()));
+            return matchesStatus && matchesRole && matchesScore && matchesSearch;
+          });
 
-        const avgScore = reports.length > 0 
-          ? Math.round(reports.reduce((acc, r) => acc + (r.overallScore || 0), 0) / reports.length) 
-          : 0;
-
-        return (
-          <div className="space-y-6">
-            {/* Pipeline Header (Glassmorphic Command Center) */}
-            <div className="relative rounded-3xl border border-violet-500/20 bg-gradient-to-r from-[#0d0e24]/95 via-[#0b0c21]/95 to-[#070814]/95 backdrop-blur-2xl p-6 sm:p-8 shadow-2xl shadow-violet-950/30 overflow-hidden">
-              <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-violet-500/50 to-transparent" />
-              <div className="absolute top-0 right-1/4 w-80 h-32 bg-violet-500/10 rounded-full blur-3xl pointer-events-none" />
-              <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide bg-violet-950/80 text-violet-300 border border-violet-700/40 shadow-inner">
-                      <Users className="h-3.5 w-3.5 text-violet-400" />
-                      Company Head Portal · TechCorp Global
-                    </span>
-                    <Badge variant="success" className="text-[11px]">
-                      <ShieldCheck className="h-3 w-3 mr-1" />
-                      Hiring Lead: {user?.name || "Sarah Jenkins"}
-                    </Badge>
+          return (
+            <div className="space-y-6">
+              {/* Search & Filter Bar */}
+              <div className="p-4 rounded-xl border border-slate-800 bg-[#0e1628] space-y-3">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+                    <input
+                      type="text"
+                      placeholder="Search candidate name, role, or notes..."
+                      value={pipelineSearch}
+                      onChange={(e) => setPipelineSearch(e.target.value)}
+                      className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-slate-800 bg-[#090e1a] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                    />
                   </div>
-                  <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                    Candidate Evaluation & Shortlist Authority
-                  </h2>
-                  <p className="text-sm text-slate-300 max-w-xl leading-relaxed">
-                    Exclusive command center for company leadership. Full access to candidate transcripts, question breakdowns, and one-click Shortlist/Reject controls with persistent notes.
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 shrink-0">
-                  <div className="rounded-xl border border-indigo-900/40 bg-[#0a0f1d] p-3 text-center">
-                    <p className="text-xl font-extrabold font-mono text-indigo-300">{pipelineCounts.all}</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Total Pool</p>
-                  </div>
-                  {(["shortlisted", "under-review", "pending", "rejected"] as const).map((s) => (
-                    <div key={s} className="rounded-xl border border-[#1e2d4f] bg-[#0a0f1d] p-3 text-center">
-                      <p className={`text-xl font-extrabold font-mono ${statusMeta[s].color}`}>{pipelineCounts[s]}</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5 capitalize">{statusMeta[s].label}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Pipeline Search & Filter Bar */}
-            <div className="p-4 rounded-2xl border border-indigo-950/80 bg-[#0a0f1d]/90 backdrop-blur-xl flex flex-col gap-3">
-              <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-                {/* Search input */}
-                <div className="relative flex-1 min-w-[200px]">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500 pointer-events-none" />
-                  <input
-                    type="text"
-                    placeholder="Search candidate by name, role, or keywords..."
-                    value={pipelineSearch}
-                    onChange={(e) => setPipelineSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-[#1e2d4f] bg-[#070b16] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-violet-500 transition-colors"
-                  />
-                </div>
-
-                {/* Role Selector */}
-                <div className="flex items-center gap-2 shrink-0">
-                  <Briefcase className="h-3.5 w-3.5 text-slate-400" />
                   <select
                     value={pipelineRoleFilter}
                     onChange={(e) => setPipelineRoleFilter(e.target.value)}
-                    className="bg-[#070b16] border border-[#1e2d4f] rounded-xl text-xs text-slate-300 px-3 py-1.5 focus:outline-none focus:border-violet-500"
+                    className="bg-[#090e1a] border border-slate-800 rounded-lg text-xs text-slate-300 px-3 py-1.5 focus:outline-none focus:border-indigo-500"
                   >
-                    <option value="all">All Tracks ({reports.length})</option>
+                    <option value="all">All Roles ({reports.length})</option>
                     <option value="fullstack">Full Stack</option>
                     <option value="frontend">Frontend</option>
                     <option value="backend">Backend</option>
@@ -1823,500 +1233,198 @@ export default function DashboardPage() {
                     <option value="data-analyst">Data Analyst</option>
                   </select>
                 </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/80">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[11px] text-slate-400 mr-1">Status:</span>
+                    {(["all", "shortlisted", "under-review", "pending", "rejected"] as const).map((st) => (
+                      <button
+                        key={st}
+                        onClick={() => setPipelineFilter(st)}
+                        className={`px-2.5 py-1 rounded text-xs capitalize transition-colors ${
+                          pipelineFilter === st
+                            ? "bg-indigo-600 text-white font-semibold"
+                            : "bg-slate-900 text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        {st}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="text-xs text-slate-400 font-mono">
+                    Showing {filteredReports.length} candidates
+                  </span>
+                </div>
               </div>
 
-              {/* Secondary Filters: Status & Score Tiers */}
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[#1a2542]">
-                {/* Score Tier Buttons */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="flex items-center gap-1 text-xs text-slate-400 font-medium mr-1">
-                    <Target className="h-3 w-3 text-indigo-400" /> Score Tier:
-                  </span>
-                  {(
-                    [
-                      { id: "all", label: "All Scores" },
-                      { id: "top", label: "≥85% Top Talent" },
-                      { id: "solid", label: "75–84% Solid" },
-                      { id: "needs-work", label: "<75% Needs Drill" },
-                    ] as const
-                  ).map((sf) => (
-                    <button
-                      key={sf.id}
-                      onClick={() => setPipelineScoreFilter(sf.id)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
-                        pipelineScoreFilter === sf.id
-                          ? "bg-indigo-600 text-white border-indigo-400 shadow-sm"
-                          : "bg-[#070b16] text-slate-400 border-[#1e2d4f] hover:text-slate-200"
-                      }`}
-                    >
-                      {sf.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Status Filter Buttons */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="flex items-center gap-1 text-xs text-slate-400 font-medium mr-1">
-                    <Filter className="h-3 w-3 text-violet-400" /> Decision:
-                  </span>
-                  {(["all", "shortlisted", "under-review", "pending", "rejected"] as const).map((f) => (
-                    <button
-                      key={f}
-                      onClick={() => setPipelineFilter(f)}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
-                        pipelineFilter === f
-                          ? "bg-violet-600 text-white border-violet-500 shadow-md"
-                          : "bg-[#070b16] text-slate-400 border-[#1e2d4f] hover:border-violet-700/50 hover:text-slate-200"
-                      }`}
-                    >
-                      {f !== "all" && statusMeta[f].icon}
-                      {f === "all" ? `All (${pipelineCounts.all})` : `${statusMeta[f].label} (${pipelineCounts[f]})`}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Candidate Evaluation Cards */}
-            {filteredReports.length === 0 ? (
-              <Card className="p-10 text-center">
-                <div className="h-12 w-12 rounded-2xl bg-violet-950/70 border border-violet-800/40 flex items-center justify-center text-violet-400 mx-auto mb-4">
-                  <Users className="h-6 w-6" />
-                </div>
-                <h3 className="text-base font-bold text-white mb-1">No candidates match your filters</h3>
-                <p className="text-xs text-slate-400">Clear search or change filter buttons above to view other candidate submissions.</p>
-              </Card>
-            ) : (
+              {/* Candidate Cards List */}
               <div className="space-y-4">
-                {filteredReports.map((rep) => {
-                  const effectiveStatus = (pipelineShortlists[rep.sessionId] ?? rep.shortlistStatus ?? "pending") as ShortlistStatus;
-                  const currentNotes = pipelineNotes[rep.sessionId] ?? rep.shortlistNotes ?? "";
-                  const meta = statusMeta[effectiveStatus] ?? statusMeta["pending"];
-                  const isEditingNote = editingNoteSessionId === rep.sessionId;
-                  const verdictColor = rep.overallScore >= 88 ? "text-emerald-400" : rep.overallScore >= 72 ? "text-indigo-400" : "text-amber-400";
-                  const isQnaExpanded = expandedTranscriptSessionId === rep.sessionId;
+                {filteredReports.length === 0 ? (
+                  <Card className="p-8 text-center text-slate-400 text-xs border-slate-800">
+                    <Users className="h-8 w-8 mx-auto text-slate-600 mb-2" />
+                    <p>No candidates match your current filter criteria.</p>
+                  </Card>
+                ) : (
+                  filteredReports.map((rep) => {
+                    const effectiveStatus = (pipelineShortlists[rep.sessionId] ?? rep.shortlistStatus ?? "pending") as ShortlistStatus;
+                    const currentNote = pipelineNotes[rep.sessionId] ?? rep.shortlistNotes ?? "";
+                    const isEditingNote = editingNoteSessionId === rep.sessionId;
+                    const isExpandedTranscript = expandedTranscriptSessionId === rep.sessionId;
 
-                  return (
-                    <Card
-                      key={rep.sessionId}
-                      className="border border-[#1e2d4f] hover:border-violet-600/50 transition-all bg-[#0a0f1d]/95 overflow-hidden shadow-xl"
-                    >
-                      <div className="p-5 sm:p-6 space-y-4">
-                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                          {/* Left: Candidate Info */}
-                          <div className="flex items-start gap-4 flex-1 min-w-0">
-                            <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-violet-600/30 to-indigo-700/30 border border-violet-700/40 flex items-center justify-center text-violet-200 font-extrabold text-xl shrink-0 shadow-inner">
-                              {rep.candidateName.charAt(0)}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-2 mb-1">
-                                <span className="font-bold text-white text-lg tracking-tight">{rep.candidateName}</span>
-                                <Badge
-                                  variant={rep.overallScore >= 88 ? "success" : rep.overallScore >= 72 ? "indigo" : "default"}
-                                  className="text-xs font-mono font-bold"
-                                >
-                                  {rep.overallScore}% Score
+                    return (
+                      <Card key={rep.sessionId} className="border-slate-800">
+                        <div className="p-5 space-y-4">
+                          {/* Card Header */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-base text-white">{rep.candidateName}</span>
+                                <Badge variant={rep.overallScore >= 85 ? "success" : rep.overallScore >= 70 ? "indigo" : "warning"} className="font-mono">
+                                  {rep.overallScore}%
                                 </Badge>
-                                <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-full border ${meta.bg} ${meta.color}`}>
-                                  {meta.icon}
-                                  {meta.label}
-                                </span>
-                                {rep.isDemoSimulation ? (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-950/40 border border-amber-800/40 text-amber-300">
-                                    Simulated Benchmark
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-950/40 border border-emerald-800/40 text-emerald-300">
-                                    Live AI Assessment
-                                  </span>
-                                )}
+                                <Badge variant="outline" className="text-[11px]">{rep.verdict}</Badge>
                               </div>
-                              <p className="text-xs text-slate-400">
-                                <span className="text-slate-300 font-medium">{rep.targetRole}</span> • Seniority: {rep.experienceLevel} • Duration: {rep.durationMinutes} min • Evaluated: {rep.completedAt}
-                              </p>
-                              <p className={`text-xs mt-1 font-semibold ${verdictColor}`}>
-                                AI Verdict: {rep.verdict}
-                              </p>
-                              {rep.metrics && rep.metrics.length > 0 && (
-                                <div className="flex flex-wrap gap-1.5 mt-2.5">
-                                  {rep.metrics.slice(0, 4).map((m) => (
-                                    <span
-                                      key={m.category}
-                                      className="inline-flex items-center gap-1 text-[10px] bg-[#070b16] border border-[#1e2d4f] rounded-lg px-2 py-0.5 text-slate-300 font-medium"
-                                    >
-                                      {m.category}: <span className="text-indigo-400 font-mono font-bold">{m.score}%</span>
-                                    </span>
-                                  ))}
-                                </div>
+                              <span className="text-xs text-slate-400">
+                                {rep.targetRole} · {rep.experienceLevel} · Completed {rep.completedAt}
+                              </span>
+                            </div>
+
+                            {/* Shortlist Action Buttons */}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {(["shortlisted", "under-review", "rejected", "pending"] as ShortlistStatus[]).map((s) => (
+                                <button
+                                  key={s}
+                                  onClick={() => handlePipelineStatusChange(rep.sessionId, rep.candidateName, s)}
+                                  className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold border transition-all ${
+                                    effectiveStatus === s
+                                      ? s === "shortlisted"
+                                        ? "border-emerald-600 bg-emerald-950/60 text-emerald-300"
+                                        : s === "under-review"
+                                        ? "border-amber-600 bg-amber-950/60 text-amber-300"
+                                        : s === "rejected"
+                                        ? "border-rose-600 bg-rose-950/60 text-rose-300"
+                                        : "border-slate-600 bg-slate-800 text-slate-200"
+                                      : "border-slate-800 bg-[#090e1a] text-slate-400 hover:text-white"
+                                  }`}
+                                >
+                                  {statusMeta[s].icon}
+                                  <span className="capitalize">{statusMeta[s].label}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Recruiter Notes Area */}
+                          <div className="p-3 rounded-lg border border-slate-800/80 bg-[#090e1a] space-y-2">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
+                                Private Hiring Notes (Persisted in SQLite)
+                              </span>
+                              {!isEditingNote ? (
+                                <button
+                                  onClick={() => {
+                                    setEditingNoteDraft(currentNote);
+                                    setEditingNoteSessionId(rep.sessionId);
+                                  }}
+                                  className="text-indigo-400 hover:underline flex items-center gap-1 text-[11px]"
+                                >
+                                  <Edit3 className="h-3 w-3" />
+                                  Edit Note
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleSaveCandidateNote(rep.sessionId, rep.candidateName, effectiveStatus)}
+                                  className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 text-[11px] font-semibold"
+                                >
+                                  <CheckCircle2 className="h-3 w-3" />
+                                  Save to DB
+                                </button>
                               )}
                             </div>
-                          </div>
 
-                          {/* Right: Authority Actions, Q&A Toggle & Full Report */}
-                          <div className="flex flex-col sm:flex-row lg:flex-col items-start sm:items-end gap-2.5 shrink-0">
-                            {/* Shortlist Decision Group */}
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="text-[11px] text-slate-400 font-medium mr-1 hidden sm:inline">Authority:</span>
-                              
-                              {/* 1. SHORTLIST */}
-                              <button
-                                title="Shortlist candidate for next round"
-                                onClick={() => handlePipelineStatusChange(rep.sessionId, rep.candidateName, "shortlisted")}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
-                                  effectiveStatus === "shortlisted"
-                                    ? "bg-emerald-600 text-white border-emerald-400 shadow-md shadow-emerald-950/80 scale-105"
-                                    : "bg-[#070b16] text-slate-400 border-[#1e2d4f] hover:text-emerald-300 hover:border-emerald-700/50"
-                                }`}
-                              >
-                                <Star className="h-3.5 w-3.5 fill-current" />
-                                <span>Shortlist</span>
-                              </button>
-
-                              {/* 2. UNDER REVIEW */}
-                              <button
-                                title="Mark candidate under review"
-                                onClick={() => handlePipelineStatusChange(rep.sessionId, rep.candidateName, "under-review")}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
-                                  effectiveStatus === "under-review"
-                                    ? "bg-amber-600 text-white border-amber-400 shadow-md shadow-amber-950/80 scale-105"
-                                    : "bg-[#070b16] text-slate-400 border-[#1e2d4f] hover:text-amber-300 hover:border-amber-700/50"
-                                }`}
-                              >
-                                <Clock3 className="h-3.5 w-3.5" />
-                                <span>Under Review</span>
-                              </button>
-
-                              {/* 3. REJECT */}
-                              <button
-                                title="Reject candidate with feedback"
-                                onClick={() => handlePipelineStatusChange(rep.sessionId, rep.candidateName, "rejected")}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
-                                  effectiveStatus === "rejected"
-                                    ? "bg-rose-700 text-white border-rose-400 shadow-md shadow-rose-950/80 scale-105"
-                                    : "bg-[#070b16] text-slate-400 border-[#1e2d4f] hover:text-rose-300 hover:border-rose-700/50"
-                                }`}
-                              >
-                                <XCircle className="h-3.5 w-3.5" />
-                                <span>Reject</span>
-                              </button>
-                            </div>
-
-                            {/* Action Buttons: Quick Q&A Drawer Toggle & Full Audit */}
-                            <div className="flex items-center gap-2 w-full sm:w-auto">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setExpandedTranscriptSessionId(isQnaExpanded ? null : rep.sessionId)}
-                                className="gap-1.5 text-xs h-8 px-3 border-violet-800/60 hover:border-violet-500 text-violet-300 hover:bg-violet-950/40"
-                              >
-                                <Quote className="h-3.5 w-3.5 text-violet-400" />
-                                {isQnaExpanded ? "Close Q&A" : `Quick Q&A (${rep.answerRecords?.length || 0})`}
-                                {isQnaExpanded ? (
-                                  <ChevronUp className="h-3 w-3" />
-                                ) : (
-                                  <ChevronDown className="h-3 w-3" />
-                                )}
-                              </Button>
-
-                              <Link href={`/report/${rep.sessionId}`}>
-                                <Button size="sm" variant="secondary" className="gap-2 text-xs h-8 px-3 border-indigo-900/50 hover:border-indigo-500/50">
-                                  <FileText className="h-3.5 w-3.5 text-indigo-400" />
-                                  Full Dossier
-                                  <ChevronRight className="h-3 w-3 text-slate-400" />
-                                </Button>
-                              </Link>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* EXPANDABLE QUICK Q&A TRANSCRIPT DRAWER */}
-                        {isQnaExpanded && (
-                          <div className="mt-3 pt-3 border-t border-violet-900/40 rounded-xl bg-[#070b16]/90 p-4 space-y-4">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <Quote className="h-4 w-4 text-violet-400" />
-                                <span className="text-xs font-bold text-white uppercase tracking-wider">
-                                  Verbatim Interview Q&A Transcript ({rep.answerRecords?.length || 0} Questions)
-                                </span>
-                              </div>
-                              <Badge variant="indigo" className="text-[10px]">Gemini AI Evaluated</Badge>
-                            </div>
-
-                            {(!rep.answerRecords || rep.answerRecords.length === 0) ? (
-                              <p className="text-xs text-slate-500 italic">No question-answer transcripts recorded for this session.</p>
-                            ) : (
-                              <div className="space-y-3.5">
-                                {rep.answerRecords.map((ans, qIdx) => (
-                                  <div key={ans.questionId || qIdx} className="rounded-xl border border-[#1e2d4f] bg-[#090e1c] p-3.5 space-y-2.5">
-                                    <div className="flex items-center justify-between flex-wrap gap-2">
-                                      <span className="text-xs font-bold text-violet-300">
-                                        Question #{qIdx + 1}: <span className="text-slate-300 font-medium">{ans.category}</span>
-                                      </span>
-                                      <div className="flex items-center gap-1.5">
-                                        <Badge variant="outline" className="text-[10px] capitalize text-slate-400 border-slate-700">
-                                          {ans.difficulty}
-                                        </Badge>
-                                        <Badge variant={ans.feedback?.score >= 85 ? "success" : ans.feedback?.score >= 70 ? "indigo" : "default"} className="text-[10px] font-mono">
-                                          {ans.feedback?.score ?? 0}% Score
-                                        </Badge>
-                                      </div>
-                                    </div>
-
-                                    <p className="text-xs text-slate-200 font-medium leading-relaxed bg-[#0f172a]/70 p-2.5 rounded-lg border border-[#1e2d4f]">
-                                      {ans.questionText}
-                                    </p>
-
-                                    <div className="space-y-1">
-                                      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                                        Candidate&apos;s Verbatim Response:
-                                      </span>
-                                      <p className="text-xs text-slate-300 font-mono bg-[#050811] p-2.5 rounded-lg border border-[#16213b] leading-relaxed whitespace-pre-wrap">
-                                        &ldquo;{ans.answerText}&rdquo;
-                                      </p>
-                                    </div>
-
-                                    {ans.feedback && (
-                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-[11px]">
-                                        {ans.feedback.strengths && ans.feedback.strengths.length > 0 && (
-                                          <div className="p-2 rounded-lg bg-emerald-950/30 border border-emerald-800/40 space-y-1">
-                                            <span className="text-emerald-400 font-bold block text-[10px] uppercase">Demonstrated Strengths:</span>
-                                            <ul className="list-disc list-inside text-emerald-200/90 space-y-0.5">
-                                              {ans.feedback.strengths.map((str, sIdx) => (
-                                                <li key={sIdx}>{str}</li>
-                                              ))}
-                                            </ul>
-                                          </div>
-                                        )}
-                                        {ans.feedback.gaps && ans.feedback.gaps.length > 0 && (
-                                          <div className="p-2 rounded-lg bg-amber-950/30 border border-amber-800/40 space-y-1">
-                                            <span className="text-amber-400 font-bold block text-[10px] uppercase">Gaps / Missed Concepts:</span>
-                                            <ul className="list-disc list-inside text-amber-200/90 space-y-0.5">
-                                              {ans.feedback.gaps.map((gp, gIdx) => (
-                                                <li key={gIdx}>{gp}</li>
-                                              ))}
-                                            </ul>
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* HIRING MANAGER NOTES & FEEDBACK SECTION */}
-                        <div className="pt-3 border-t border-[#18233d] flex flex-col gap-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                              <ShieldCheck className="h-3.5 w-3.5 text-violet-400" />
-                              Hiring Committee Notes (Visible to Candidate):
-                            </span>
-                            {!isEditingNote && (
-                              <button
-                                onClick={() => {
-                                  setEditingNoteSessionId(rep.sessionId);
-                                  setEditingNoteDraft(currentNotes);
-                                }}
-                                className="inline-flex items-center gap-1 text-[11px] text-violet-400 hover:text-violet-300 font-semibold"
-                              >
-                                <Edit3 className="h-3 w-3" />
-                                {currentNotes ? "Edit Notes" : "+ Add Recruiter Note"}
-                              </button>
-                            )}
-                          </div>
-
-                          {isEditingNote ? (
-                            <div className="space-y-2 mt-1">
+                            {isEditingNote ? (
                               <textarea
-                                rows={2}
                                 value={editingNoteDraft}
                                 onChange={(e) => setEditingNoteDraft(e.target.value)}
-                                placeholder="Enter evaluation notes, decision rationale, or interview invitation details..."
-                                className="w-full p-2.5 rounded-xl border border-violet-600/50 bg-[#070b16] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-violet-400 transition-colors"
+                                rows={2}
+                                className="w-full text-xs text-white bg-slate-900 border border-slate-700 rounded p-2 focus:outline-none focus:border-indigo-500"
+                                placeholder="Add internal recruiter notes..."
                               />
-                              <div className="flex items-center justify-end gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => setEditingNoteSessionId(null)}
-                                  className="h-7 text-xs text-slate-400 hover:text-white"
-                                >
-                                  Cancel
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleSaveCandidateNote(rep.sessionId, rep.candidateName, effectiveStatus)}
-                                  className="h-7 text-xs bg-violet-600 hover:bg-violet-500 gap-1 text-white font-bold"
-                                >
-                                  <Save className="h-3 w-3" />
-                                  Save Notes
-                                </Button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="p-3 rounded-xl bg-[#070b16] border border-[#192542] text-xs">
-                              {currentNotes ? (
-                                <p className="text-slate-200 italic leading-relaxed">
-                                  &ldquo;{currentNotes}&rdquo;
-                                </p>
-                              ) : (
-                                <p className="text-slate-500 italic">
-                                  No notes added yet. Click &quot;+ Add Recruiter Note&quot; to leave feedback or next round details.
-                                </p>
-                              )}
+                            ) : (
+                              <p className="text-xs text-slate-300 italic">
+                                {currentNote || <span className="text-slate-500">No review notes recorded yet.</span>}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Footer Actions */}
+                          <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-xs">
+                            <button
+                              onClick={() => setExpandedTranscriptSessionId(isExpandedTranscript ? null : rep.sessionId)}
+                              className="text-slate-400 hover:text-white flex items-center gap-1"
+                            >
+                              {isExpandedTranscript ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                              <span>{isExpandedTranscript ? "Collapse Answers" : "Preview Question Turns"}</span>
+                            </button>
+                            <Link href={`/report/${rep.sessionId}`}>
+                              <Button size="sm" variant="secondary" className="gap-1.5 text-xs h-7 border-slate-700">
+                                <FileText className="h-3.5 w-3.5 text-indigo-400" />
+                                Inspect Full Evaluation Dossier
+                              </Button>
+                            </Link>
+                          </div>
+
+                          {/* Transcript Preview */}
+                          {isExpandedTranscript && rep.answerRecords && (
+                            <div className="pt-3 border-t border-slate-800 space-y-2">
+                              {rep.answerRecords.map((ans, idx) => (
+                                <div key={ans.questionId} className="p-2.5 rounded bg-slate-900/40 border border-slate-800/60 text-xs space-y-1">
+                                  <span className="font-semibold text-indigo-300 block">Q{idx + 1}: {ans.questionText}</span>
+                                  <p className="text-slate-300 italic">&ldquo;{ans.answerText}&rdquo;</p>
+                                  <span className="text-[10px] text-emerald-400 block font-mono">Score: {ans.feedback?.score}%</span>
+                                </div>
+                              ))}
                             </div>
                           )}
                         </div>
+                      </Card>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ========================================================================= */}
+        {/* TAB 7: HIRING ANALYTICS (RECRUITER)                                       */}
+        {/* ========================================================================= */}
+        {activeTab === "analytics" && isRecruiter && (
+          <div className="space-y-6">
+            <Card className="border-slate-800">
+              <CardHeader>
+                <CardTitle>Hiring Track & Role Distribution</CardTitle>
+                <CardDescription>Aggregate evaluation performance across active technical candidate pools.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {recruiterStats.roleBreakdown.map((item) => (
+                    <div key={item.role} className="p-4 rounded-xl border border-slate-800 bg-slate-900/50 flex justify-between items-center">
+                      <div>
+                        <span className="font-bold text-sm text-white block capitalize">{item.role}</span>
+                        <span className="text-xs text-slate-400">{item.count} evaluated candidate(s)</span>
                       </div>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Pipeline Footer Note */}
-            <p className="text-[11px] text-center text-slate-500">
-              Shortlist decisions & notes persist in local candidate profiles and sync with candidate view. Evaluated by Adaptive InterviewIQ Gemini AI Engine.
-            </p>
-          </div>
-        );
-      })()}
-
-      {/* ========================================================================= */}
-      {/* TAB 6: RECRUITER COMPANY HIRING ANALYTICS                                 */}
-      {/* ========================================================================= */}
-      {activeTab === "analytics" && isRecruiter && (
-        <div className="space-y-6">
-          {/* Header */}
-          <div className="relative rounded-3xl border border-violet-500/20 bg-gradient-to-r from-[#0d0e24]/95 via-[#0b0c21]/95 to-[#070814]/95 backdrop-blur-2xl p-6 sm:p-8 shadow-2xl overflow-hidden">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="space-y-2">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide bg-violet-950/80 text-violet-300 border border-violet-700/40">
-                  <BarChart3 className="h-3.5 w-3.5 text-violet-400" />
-                  TechCorp Global · Hiring Intelligence
-                </span>
-                <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
-                  Company-Wide Talent Acquisition Analytics
-                </h2>
-                <p className="text-xs sm:text-sm text-slate-300 max-w-xl">
-                  Aggregated performance metrics, track calibrations, and competency benchmarks across all evaluated candidates.
-                </p>
-              </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleExportPipelineCSV}
-                className="gap-2 text-xs border-violet-800/60 text-violet-300 hover:bg-violet-950/50 self-start md:self-auto"
-              >
-                <Download className="h-3.5 w-3.5 text-violet-400" />
-                Export Analytics Dataset
-              </Button>
-            </div>
-          </div>
-
-          {/* Top 3 Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* 1. Track Distribution */}
-            <Card className="p-5 space-y-3">
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span className="font-semibold uppercase tracking-wider text-[10px]">Track Distribution</span>
-                <Briefcase className="h-4 w-4 text-violet-400" />
-              </div>
-              <div className="space-y-2 pt-1">
-                {recruiterStats.roleBreakdown.map((rb) => (
-                  <div key={rb.role} className="space-y-1">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-slate-300 font-medium capitalize">{rb.role}</span>
-                      <span className="text-indigo-400 font-mono font-bold">{rb.count} candidates ({rb.avgScore}%)</span>
+                      <Badge variant="indigo" className="font-mono text-xs">
+                        Avg: {item.avgScore}%
+                      </Badge>
                     </div>
-                    <Progress value={(rb.count / (recruiterStats.total || 1)) * 100} size="sm" indicatorColor="indigo" />
-                  </div>
-                ))}
-              </div>
-            </Card>
-
-            {/* 2. Score Tier Distribution */}
-            <Card className="p-5 space-y-3">
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span className="font-semibold uppercase tracking-wider text-[10px]">Score Tier Distribution</span>
-                <Target className="h-4 w-4 text-emerald-400" />
-              </div>
-              <div className="space-y-2.5 pt-1 text-xs">
-                <div className="p-2.5 rounded-xl bg-emerald-950/30 border border-emerald-800/40 flex items-center justify-between">
-                  <span className="text-emerald-300 font-medium">Top Tier (≥85%)</span>
-                  <span className="text-emerald-400 font-mono font-bold">
-                    {reports.filter((r) => r.overallScore >= 85).length} candidates
-                  </span>
+                  ))}
                 </div>
-                <div className="p-2.5 rounded-xl bg-indigo-950/30 border border-indigo-800/40 flex items-center justify-between">
-                  <span className="text-indigo-300 font-medium">Solid Hire (75–84%)</span>
-                  <span className="text-indigo-400 font-mono font-bold">
-                    {reports.filter((r) => r.overallScore >= 75 && r.overallScore < 85).length} candidates
-                  </span>
-                </div>
-                <div className="p-2.5 rounded-xl bg-amber-950/30 border border-amber-800/40 flex items-center justify-between">
-                  <span className="text-amber-300 font-medium">Needs Focus (&lt;75%)</span>
-                  <span className="text-amber-400 font-mono font-bold">
-                    {reports.filter((r) => r.overallScore < 75).length} candidates
-                  </span>
-                </div>
-              </div>
-            </Card>
-
-            {/* 3. Conversion Funnel */}
-            <Card className="p-5 space-y-3">
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span className="font-semibold uppercase tracking-wider text-[10px]">Hiring Committee Funnel</span>
-                <TrendingUp className="h-4 w-4 text-fuchsia-400" />
-              </div>
-              <div className="space-y-2.5 pt-1 text-xs">
-                <div className="flex justify-between items-center text-slate-300">
-                  <span>Evaluated Pool</span>
-                  <span className="font-mono font-bold text-white">{recruiterStats.total}</span>
-                </div>
-                <Progress value={100} size="sm" indicatorColor="indigo" />
-
-                <div className="flex justify-between items-center text-slate-300">
-                  <span>Under Active Review</span>
-                  <span className="font-mono font-bold text-amber-400">{recruiterStats.underReview}</span>
-                </div>
-                <Progress value={(recruiterStats.underReview / (recruiterStats.total || 1)) * 100} size="sm" indicatorColor="amber" />
-
-                <div className="flex justify-between items-center text-slate-300">
-                  <span>Shortlisted for Round 2</span>
-                  <span className="font-mono font-bold text-emerald-400">{recruiterStats.shortlisted} ({recruiterStats.shortlistRate}%)</span>
-                </div>
-                <Progress value={recruiterStats.shortlistRate} size="sm" indicatorColor="emerald" />
-              </div>
+              </CardContent>
             </Card>
           </div>
-
-          {/* Collective Competencies Across All Candidates */}
-          <Card className="p-6">
-            <CardHeader className="p-0 pb-4">
-              <CardTitle>Collective Technical Competency Benchmarks</CardTitle>
-              <CardDescription>
-                Aggregated category scores across all {reports.length} candidate technical interviews:
-              </CardDescription>
-            </CardHeader>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {analytics.competencies.map((c) => (
-                <div key={c.category} className="p-3.5 rounded-xl border border-[#1e2d4f] bg-[#070b16] space-y-2">
-                  <div className="flex justify-between text-xs">
-                    <span className="font-bold text-white">{c.category}</span>
-                    <span className="font-mono font-bold text-indigo-400">{c.avgScore}% • {c.level}</span>
-                  </div>
-                  <Progress value={c.avgScore} size="sm" indicatorColor={c.avgScore >= 85 ? "emerald" : c.avgScore >= 75 ? "indigo" : "amber"} />
-                  <p className="text-[10px] text-slate-400">Tested across {c.count} candidate responses</p>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </div>
-      )}
+        )}
+      </main>
     </div>
   );
 }

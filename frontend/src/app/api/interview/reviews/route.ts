@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveRequestUser } from "@/lib/resolve-user";
 import { getAllRecruiterReviews } from "@/lib/report-persistence";
+export { POST } from "../review/route";
 
 export async function GET(req: NextRequest) {
   try {
