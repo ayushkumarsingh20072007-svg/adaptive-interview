@@ -71,6 +71,14 @@ export interface AnswerFeedback {
   strengths: string[];
   gaps: string[];
   adaptiveNote: string;
+  technicalCorrectness?: "accurate" | "partial" | "incorrect";
+  explanationQuality?: "clear" | "acceptable" | "confusing";
+  reasoningAndProblemSolving?: string;
+  completeness?: "complete" | "partially_complete" | "incomplete";
+  evidenceQuote?: string | null;
+  missingConcepts?: string[];
+  competencyStatus?: SkillStatusCategory;
+  confidence?: "high" | "medium" | "low";
 }
 
 export interface AnswerRecord {
@@ -83,16 +91,36 @@ export interface AnswerRecord {
   feedback: AnswerFeedback;
 }
 
+export type InterviewSessionStatus = "in-progress" | "completed" | "terminated_integrity";
+
+export interface IntegrityEventSummary {
+  id: string;
+  sessionId: string;
+  userId?: string | null;
+  eventType: string;
+  eventNumber: number;
+  policyVersion: string;
+  stageQuestionId?: string | null;
+  stageQuestionIndex?: number | null;
+  actionTaken: "warning_issued" | "interview_terminated";
+  serverTimestamp: string;
+}
+
 export interface InterviewSession {
   id: string;
   setup: CandidateSetup;
-  status: "in-progress" | "completed";
+  status: InterviewSessionStatus;
   startedAt: string;
   endedAt?: string;
   durationSeconds: number;
   answers: AnswerRecord[];
   currentQuestionIndex: number;
   userId?: string;
+  integrityPolicyAcknowledgedAt?: string;
+  integrityPolicyVersion?: string;
+  violationCount?: number;
+  terminationReason?: string;
+  integrityEvents?: IntegrityEventSummary[];
 }
 
 export type SkillStatusCategory =
@@ -141,7 +169,7 @@ export interface EvaluationReport {
   completedAt: string;
   durationMinutes: number;
   overallScore: number; // 0 - 100
-  verdict: "Strong Hire Recommendation" | "Hire Recommendation" | "Additional Review Recommended";
+  verdict: "Strong Hire Recommendation" | "Hire Recommendation" | "Additional Review Recommended" | "Terminated (Integrity Policy)";
   metrics: SkillMetric[];
   strengths: string[];
   areasToImprove: string[];
@@ -157,6 +185,13 @@ export interface EvaluationReport {
     demonstrated: number;
     claimedUnvalidated: number;
     notAssessed: number;
+  };
+  integrityStatus?: "verified_clean" | "warning_issued" | "terminated_integrity";
+  integritySummary?: {
+    incidents: number;
+    events: IntegrityEventSummary[];
+    policyVersion: string;
+    acknowledgedAt?: string;
   };
 }
 

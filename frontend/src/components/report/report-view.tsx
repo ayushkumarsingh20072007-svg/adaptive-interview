@@ -161,9 +161,16 @@ export function ReportView({ sessionId }: ReportViewProps) {
     return { status: "loading", report: SAMPLE_REPORT };
   });
 
+  // Redirect unauthenticated users to login
+  React.useEffect(() => {
+    if (isMounted && !isLoading && !user) {
+      router.replace(`/login?redirect=/report/${encodeURIComponent(sessionId)}`);
+    }
+  }, [isMounted, isLoading, user, sessionId, router]);
+
   // Load from server endpoint while preserving localStorage and demo fallbacks
   React.useEffect(() => {
-    if (!isMounted || isLoading) return;
+    if (!isMounted || isLoading || !user) return;
 
     if (sessionId === "demo-session") {
       setReportState({ status: "ok", report: SAMPLE_REPORT });
@@ -331,6 +338,40 @@ export function ReportView({ sessionId }: ReportViewProps) {
     router.push(`/interview/${newSession.id}`);
   }
 
+  if (!isMounted || isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center p-16 text-center text-slate-400">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-400 mb-3" />
+        <p className="text-sm">Authenticating scorecard session...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="flex flex-col items-center justify-center max-w-md mx-auto py-20 text-center space-y-4">
+        <div className="h-14 w-14 rounded-2xl bg-amber-950/40 border border-amber-800/60 flex items-center justify-center text-amber-400">
+          <ShieldAlert className="h-7 w-7" />
+        </div>
+        <div className="space-y-1">
+          <Badge variant="warning">Authentication Required</Badge>
+          <h2 className="text-xl font-bold text-white mt-2">Sign In Required</h2>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            You must be signed in to view candidate performance reports and scorecards.
+          </p>
+        </div>
+        <div className="flex items-center gap-3 pt-2">
+          <Link href={`/login?redirect=/report/${encodeURIComponent(sessionId)}`}>
+            <Button size="sm" className="bg-indigo-600 hover:bg-indigo-500">Sign In</Button>
+          </Link>
+          <Link href={`/signup?redirect=/report/${encodeURIComponent(sessionId)}`}>
+            <Button variant="outline" size="sm" className="border-slate-800">Create Account</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   if (reportState.status === "loading") {
     return (
       <div className="flex flex-col items-center justify-center p-16 text-center text-slate-400">
@@ -409,11 +450,13 @@ export function ReportView({ sessionId }: ReportViewProps) {
   const consistency = getConsistencyAnalysis(report.answerRecords, report.overallScore);
   const readinessDescription = getReadinessDescription(report.overallScore);
 
-  const verdictVariant: "success" | "indigo" | "warning" =
+  const verdictVariant: "success" | "indigo" | "warning" | "danger" =
     report.verdict === "Strong Hire Recommendation"
       ? "success"
       : report.verdict === "Hire Recommendation"
       ? "indigo"
+      : report.verdict === "Terminated (Integrity Policy)"
+      ? "danger"
       : "warning";
 
   const shortlistStatusMeta: Record<ShortlistStatus, { label: string; variant: "success" | "indigo" | "warning" | "danger" | "default"; icon: React.ReactNode }> = {
@@ -1084,6 +1127,158 @@ export function ReportView({ sessionId }: ReportViewProps) {
             </div>
           </CardContent>
         )}
+      </Card>
+
+      {/* ─── WORKSPACE INTEGRITY & FOCUS TELEMETRY ─── */}
+      <Card className="rounded-2xl border border-slate-800/80 bg-[#0c1427]/95 shadow-md overflow-hidden">
+        <CardHeader className="p-5 sm:p-6 border-b border-slate-800/80">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div
+                className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                  report.integrityStatus === "terminated_integrity"
+                    ? "bg-rose-500/10 text-rose-400 border-rose-500/25"
+                    : report.integrityStatus === "warning_issued"
+                    ? "bg-amber-500/10 text-amber-400 border-amber-500/25"
+                    : "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
+                }`}
+              >
+                {report.integrityStatus === "terminated_integrity" ? (
+                  <ShieldAlert className="h-5 w-5" />
+                ) : (
+                  <ShieldCheck className="h-5 w-5" />
+                )}
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <CardTitle className="text-base sm:text-lg font-bold text-white">
+                    Workspace Integrity & Focus Telemetry
+                  </CardTitle>
+                  <Badge
+                    variant={
+                      report.integrityStatus === "terminated_integrity"
+                        ? "danger"
+                        : report.integrityStatus === "warning_issued"
+                        ? "warning"
+                        : "success"
+                    }
+                    className="text-[10px] px-2 py-0.5"
+                  >
+                    {report.integrityStatus === "terminated_integrity"
+                      ? "Policy Triggered · Terminated"
+                      : report.integrityStatus === "warning_issued"
+                      ? "1 Incident Recorded"
+                      : "Verified Focus · Clean"}
+                  </Badge>
+                </div>
+                <CardDescription className="text-xs text-slate-400 mt-1">
+                  Browser window and tab visibility telemetry recorded under interview integrity policy {report.integritySummary?.policyVersion || "v1.0"}.
+                </CardDescription>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0">
+              <span className="text-xs font-mono px-3 py-1.5 rounded-xl border border-slate-800 bg-[#080d19] text-slate-300">
+                Incidents: <strong className={report.integrityStatus === "terminated_integrity" ? "text-rose-400" : report.integrityStatus === "warning_issued" ? "text-amber-400" : "text-emerald-400"}>{report.integritySummary?.incidents ?? 0} / 2</strong>
+              </span>
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-5 sm:p-6 space-y-5">
+          {/* Metadata Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            <div className="p-3.5 rounded-xl border border-slate-800/80 bg-[#080d19]/80">
+              <span className="text-[11px] font-medium text-slate-400 block">Policy Version</span>
+              <span className="text-sm font-semibold text-white mt-0.5 block font-mono">
+                {report.integritySummary?.policyVersion || "v1.0 (Dual-Incident Focus Rule)"}
+              </span>
+            </div>
+            <div className="p-3.5 rounded-xl border border-slate-800/80 bg-[#080d19]/80">
+              <span className="text-[11px] font-medium text-slate-400 block">Candidate Policy Consent</span>
+              <span className="text-sm font-semibold text-indigo-300 mt-0.5 block font-mono">
+                {report.integritySummary?.acknowledgedAt
+                  ? new Date(report.integritySummary.acknowledgedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                  : "Acknowledged Pre-Interview"}
+              </span>
+            </div>
+            <div className="p-3.5 rounded-xl border border-slate-800/80 bg-[#080d19]/80">
+              <span className="text-[11px] font-medium text-slate-400 block">Authoritative Enforcement</span>
+              <span className={`text-sm font-semibold mt-0.5 block ${report.integrityStatus === "terminated_integrity" ? "text-rose-400" : "text-emerald-400"}`}>
+                {report.integrityStatus === "terminated_integrity"
+                  ? "Interview Terminated Early"
+                  : "Session Active / Concluded Normally"}
+              </span>
+            </div>
+          </div>
+
+          {/* Event Telemetry Audit Log */}
+          {report.integritySummary?.events && report.integritySummary.events.length > 0 ? (
+            <div className="space-y-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-300 block">
+                Recorded Focus-Loss Transitions ({report.integritySummary.events.length})
+              </span>
+              <div className="space-y-2.5">
+                {report.integritySummary.events.map((evt, idx) => (
+                  <div
+                    key={evt.id || idx}
+                    className="p-3.5 rounded-xl border border-slate-800/90 bg-[#080d19] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-500/10 text-amber-400 font-mono text-xs font-bold border border-amber-500/20">
+                        #{evt.eventNumber || idx + 1}
+                      </span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-200">
+                            Focus-loss incident detected
+                          </span>
+                          <span className="font-mono text-[10px] text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
+                            {evt.eventType}
+                          </span>
+                        </div>
+                        <p className="text-slate-400 text-[11px] mt-0.5">
+                          Interview Context: {evt.stageQuestionId ? `Question ${evt.stageQuestionId}` : "Active Interview Turn"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 sm:text-right">
+                      <div className="space-y-0.5">
+                        <span className="text-slate-400 font-mono text-[11px] block">
+                          {new Date(evt.serverTimestamp).toLocaleString()}
+                        </span>
+                        <Badge
+                          variant={evt.actionTaken === "interview_terminated" ? "danger" : "warning"}
+                          className="text-[10px] px-2 py-0.5"
+                        >
+                          {evt.actionTaken === "interview_terminated"
+                            ? "Action: Session Terminated"
+                            : "Action: Warning 1 of 2 Displayed"}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 rounded-xl border border-emerald-950/40 bg-emerald-950/20 flex items-center gap-3 text-xs text-emerald-200">
+              <CheckCircle2 className="h-4.5 w-4.5 text-emerald-400 shrink-0" />
+              <span>
+                <strong>Zero Focus-Loss Incidents:</strong> Candidate maintained active page visibility and focus throughout the entire monitored session.
+              </span>
+            </div>
+          )}
+
+          {/* Neutral Advisory Notice */}
+          <div className="p-3.5 rounded-xl border border-slate-800/80 bg-[#080d19]/60 text-slate-400 text-[11px] leading-relaxed flex items-start gap-2.5">
+            <HelpCircle className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
+            <span>
+              <strong>Integrity Telemetry Policy:</strong> Browser focus changes indicate that the interview window or tab lost active focus. Focus-loss events are technical signals and do not constitute conclusive evidence of misconduct. System notifications, accidental clicks, or OS dialogs can trigger focus changes.
+            </span>
+          </div>
+        </CardContent>
       </Card>
 
       {/* 3. Strengths vs Areas to Improve */}

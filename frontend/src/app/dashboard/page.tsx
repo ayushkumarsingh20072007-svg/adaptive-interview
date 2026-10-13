@@ -52,6 +52,8 @@ import {
   Lock,
   Loader2,
   Upload,
+  BookOpen,
+  ShieldAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
@@ -70,6 +72,7 @@ import { getStoredSetup, getAllReports, updateCandidateShortlist } from "@/lib/s
 import { initializeInterviewSession } from "@/lib/interview-engine";
 import { useIsMounted } from "@/lib/use-mounted";
 import { useAuth } from "@/lib/auth-context";
+import { AiAssistantPanel } from "@/components/interview/ai-assistant-panel";
 
 interface CompetencyStat {
   category: string;
@@ -79,7 +82,7 @@ interface CompetencyStat {
   status: SkillStatusCategory;
 }
 
-type TabType = "overview" | "history" | "skills" | "settings" | "pipeline" | "analytics" | "reviews";
+type TabType = "overview" | "history" | "skills" | "settings" | "pipeline" | "analytics" | "reviews" | "practice";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -470,6 +473,7 @@ export default function DashboardPage() {
     { id: "overview" as TabType, label: "Overview", icon: LayoutDashboard },
     { id: "history" as TabType, label: "My Reports", icon: FileText, count: reports.length },
     { id: "skills" as TabType, label: "Skills & Progress", icon: BrainCircuit },
+    { id: "practice" as TabType, label: "AI Practice", icon: Sparkles },
     { id: "settings" as TabType, label: "Profile", icon: User },
   ];
 
@@ -491,6 +495,7 @@ export default function DashboardPage() {
       case "pipeline": return "Candidate Pipeline";
       case "analytics": return "Company Hiring Analytics";
       case "reviews": return "Shortlist Decisions & Review Notes";
+      case "practice": return "AI Practice Coach";
       default: return "Dashboard";
     }
   }, [activeTab, isRecruiter]);
@@ -541,13 +546,13 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 w-full max-w-7xl mx-auto py-2">
+    <div className="flex flex-col lg:flex-row gap-6 w-full max-w-7xl mx-auto pt-2 pb-10">
       {/* ========================================================================= */}
       {/* SAAS RESPONSIVE APPLICATION SHELL: LEFT SIDEBAR                          */}
       {/* ========================================================================= */}
-      <aside className="lg:w-64 shrink-0 flex flex-col gap-4">
+      <aside className="lg:w-72 shrink-0 flex flex-col gap-3.5 lg:sticky lg:top-20 self-start">
         {/* Workspace Card */}
-        <div className="p-4 sm:p-5 rounded-2xl border border-slate-800/80 bg-[#0c1427]/90 backdrop-blur-md shadow-md">
+        <div className="p-4 rounded-2xl border border-slate-800/80 bg-[#0c1427] shadow-lg">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-600/30 font-bold text-xs">
@@ -570,15 +575,45 @@ export default function DashboardPage() {
             </button>
           </div>
 
-          <div className="mt-4 pt-3.5 border-t border-slate-800/80 flex items-center justify-between text-xs">
+          <div className="mt-3.5 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
             <span className="text-slate-400">Environment:</span>
             <Badge variant="indigo" className="text-[10px] py-0.5 px-2 font-mono">SQLite Active</Badge>
           </div>
         </div>
 
+        {/* Candidate Target Track Card (Candidate Only) */}
+        {!isRecruiter && (
+          <div className={`p-4 rounded-2xl border border-slate-800/80 bg-[#0c1427] shadow-lg flex flex-col gap-2.5 ${mobileSidebarOpen ? "block" : "hidden lg:flex"}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Target className="h-4 w-4 text-indigo-400" />
+                <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                  Target Track
+                </span>
+              </div>
+              <Link
+                href="/setup"
+                className="text-[10px] text-indigo-400 hover:text-indigo-300 font-medium transition-colors"
+              >
+                Change
+              </Link>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-[#080e1c] p-2.5 space-y-1">
+              <span className="text-xs font-semibold text-white block truncate">
+                {roleName}
+              </span>
+              <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-400">
+                <span className="capitalize">{setup.experienceLevel}</span>
+                <span>•</span>
+                <span className="capitalize">{setup.interviewFocus} Focus</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Sidebar Nav: Desktop or open Mobile Drawer */}
-        <div className={`flex flex-col gap-1.5 p-2.5 rounded-2xl border border-slate-800/80 bg-[#0c1427]/90 shadow-md ${mobileSidebarOpen ? "block" : "hidden lg:flex"}`}>
-          <span className="px-3.5 py-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+        <div className={`flex flex-col gap-1 p-2 rounded-2xl border border-slate-800/80 bg-[#0c1427] shadow-lg ${mobileSidebarOpen ? "block" : "hidden lg:flex"}`}>
+          <span className="px-3 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
             Workspace Navigation
           </span>
           {navItems.map((item) => {
@@ -612,8 +647,59 @@ export default function DashboardPage() {
           })}
         </div>
 
+        {/* Candidate Readiness Checklist Widget (Candidate Only) */}
+        {!isRecruiter && (
+          <div className={`p-4 rounded-2xl border border-slate-800/80 bg-[#0c1427] shadow-lg flex flex-col gap-3 ${mobileSidebarOpen ? "block" : "hidden lg:flex"}`}>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                Interview Readiness
+              </span>
+              <Badge
+                variant={hasConfiguredResume ? "success" : "default"}
+                className="text-[10px] py-0 px-1.5"
+              >
+                {hasConfiguredResume ? "100% Ready" : "50% Pending"}
+              </Badge>
+            </div>
+
+            <Progress value={hasConfiguredResume ? 100 : 50} className="h-1.5 bg-slate-800" />
+
+            <div className="space-y-2 pt-1 text-[11px]">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-400 flex items-center gap-1.5">
+                  <span className={`h-1.5 w-1.5 rounded-full ${hasConfiguredResume ? "bg-emerald-400" : "bg-amber-400"}`} />
+                  Resume / CV
+                </span>
+                <span className={hasConfiguredResume ? "text-emerald-400 font-medium" : "text-amber-400 font-semibold"}>
+                  {hasConfiguredResume ? "Attached" : "Required"}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-400 flex items-center gap-1.5">
+                  <span className={`h-1.5 w-1.5 rounded-full ${hasConfiguredResume ? "bg-emerald-400" : "bg-slate-600"}`} />
+                  AI Question Calibrator
+                </span>
+                <span className={hasConfiguredResume ? "text-emerald-400 font-medium" : "text-slate-500"}>
+                  {hasConfiguredResume ? "Calibrated" : "Waiting for CV"}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-400 flex items-center gap-1.5">
+                  <span className={`h-1.5 w-1.5 rounded-full ${hasConfiguredResume ? "bg-emerald-400" : "bg-slate-600"}`} />
+                  Technical Round
+                </span>
+                <span className={hasConfiguredResume ? "text-emerald-400 font-medium" : "text-slate-500"}>
+                  {hasConfiguredResume ? "Unlocked" : "Locked"}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* User Card at bottom of Sidebar */}
-        <div className={`p-4 rounded-2xl border border-slate-800/80 bg-[#0c1427]/90 shadow-md flex flex-col gap-3 ${mobileSidebarOpen ? "block" : "hidden lg:flex"}`}>
+        <div className={`p-4 rounded-2xl border border-slate-800/80 bg-[#0c1427] shadow-lg flex flex-col gap-3 ${mobileSidebarOpen ? "block" : "hidden lg:flex"}`}>
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-full bg-slate-800 border border-slate-700/80 flex items-center justify-center font-bold text-xs text-indigo-300 shadow-inner">
               {displayName.slice(0, 2).toUpperCase()}
@@ -1174,6 +1260,94 @@ export default function DashboardPage() {
         )}
 
         {/* ========================================================================= */}
+        {/* TAB 5: AI PRACTICE COACH (CANDIDATE ONLY)                                 */}
+        {/* ========================================================================= */}
+        {activeTab === "practice" && !isRecruiter && (
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-indigo-400" />
+                  AI Practice Coach
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Full AI tutoring outside of interviews. Ask anything — concepts, mock answers, code review, study strategies.
+                </p>
+              </div>
+              <Badge variant="success" className="gap-1.5 px-3 py-1 self-start sm:self-auto">
+                <Sparkles className="h-3 w-3" />
+                Practice Mode Active
+              </Badge>
+            </div>
+
+            {/* Two-column layout: assistant + tips */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Assistant Panel — full width on mobile, 2/3 on desktop */}
+              <div className="lg:col-span-2">
+                <AiAssistantPanel
+                  mode="practice"
+                  targetRole={setup.targetRole}
+                  experienceLevel={setup.experienceLevel}
+                  defaultCollapsed={false}
+                />
+              </div>
+
+              {/* Tips Sidebar */}
+              <div className="space-y-4">
+                <Card className="rounded-2xl border border-indigo-800/40 bg-gradient-to-b from-[#0d1227] to-[#080e1e] shadow-md overflow-hidden">
+                  <CardHeader className="p-5 border-b border-indigo-900/40">
+                    <CardTitle className="text-sm font-bold text-white flex items-center gap-2">
+                      <BookOpen className="h-4 w-4 text-indigo-400" />
+                      What to Practice
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-5 space-y-3 text-xs text-slate-300">
+                    <div className="space-y-2">
+                      <p className="font-semibold text-indigo-300 uppercase tracking-wider text-[10px]">Suggested Prompts</p>
+                      {[
+                        `Explain how ${setup.targetRole === "frontend" ? "React reconciliation" : setup.targetRole === "backend" ? "database indexing" : setup.targetRole === "data-analyst" ? "SQL window functions" : "system design load balancing"} works`,
+                        "Give me a mock answer for a behavioral STAR question",
+                        "Review this code I wrote and suggest improvements",
+                        "What are the most common interview topics for my role?",
+                        "Help me explain my approach to a complex problem",
+                      ].map((prompt) => (
+                        <button
+                          key={prompt}
+                          className="w-full text-left px-3 py-2 rounded-lg border border-slate-800/60 bg-slate-900/60 text-slate-300 hover:bg-indigo-950/40 hover:border-indigo-700/50 hover:text-white transition-colors text-[11px] leading-relaxed"
+                          onClick={() => {
+                            // Scroll to the AI panel input and pre-fill
+                            const el = document.getElementById("ai-assistant-input");
+                            if (el) {
+                              el.focus();
+                              const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+                              nativeInputValueSetter?.call(el, prompt);
+                              el.dispatchEvent(new Event("input", { bubbles: true }));
+                            }
+                          }}
+                        >
+                          &ldquo;{prompt}&rdquo;
+                        </button>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="rounded-2xl border border-slate-800/60 bg-[#0c1427]/80 shadow-md overflow-hidden">
+                  <CardContent className="p-4 space-y-2 text-xs text-slate-400">
+                    <p className="font-semibold text-slate-300 flex items-center gap-1.5">
+                      <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+                      Practice Mode Privacy
+                    </p>
+                    <p>Practice conversations are not recorded in your interview history or shown to recruiters. They are purely for self-directed learning.</p>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
         {/* TAB 6: RECRUITER CANDIDATE PIPELINE OR REVIEWS                            */}
         {/* ========================================================================= */}
         {(activeTab === "pipeline" || activeTab === "reviews") && isRecruiter && (() => {
@@ -1277,12 +1451,28 @@ export default function DashboardPage() {
                           {/* Card Header */}
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-bold text-base text-white">{rep.candidateName}</span>
                                 <Badge variant={rep.overallScore >= 85 ? "success" : rep.overallScore >= 70 ? "indigo" : "warning"} className="font-mono">
                                   {rep.overallScore}%
                                 </Badge>
                                 <Badge variant="outline" className="text-[11px]">{rep.verdict}</Badge>
+                                {rep.integrityStatus === "terminated_integrity" || rep.verdict?.includes("Terminated") ? (
+                                  <Badge variant="danger" className="text-[10px] gap-1 py-0.5 px-2 font-medium">
+                                    <ShieldAlert className="h-2.5 w-2.5" />
+                                    Terminated (Focus Limit)
+                                  </Badge>
+                                ) : rep.integrityStatus === "warning_issued" ? (
+                                  <Badge variant="warning" className="text-[10px] gap-1 py-0.5 px-2 font-medium">
+                                    <AlertTriangle className="h-2.5 w-2.5" />
+                                    1 Focus Incident
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-[10px] gap-1 py-0.5 px-2 border-emerald-500/40 text-emerald-400 bg-emerald-950/20">
+                                    <ShieldCheck className="h-2.5 w-2.5" />
+                                    Focus Verified
+                                  </Badge>
+                                )}
                               </div>
                               <span className="text-xs text-slate-400">
                                 {rep.targetRole} · {rep.experienceLevel} · Completed {rep.completedAt}

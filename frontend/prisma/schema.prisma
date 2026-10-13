@@ -52,15 +52,22 @@ model InterviewSession {
   skills          String             // Serialized JSON string: string[]
   resumeFileName  String?
   isSampleResume  Boolean            @default(false)
-  status          String             @default("in-progress") // "in-progress" | "completed"
+  status          String             @default("in-progress") // "in-progress" | "completed" | "terminated_integrity"
   durationSeconds Int                @default(0)
   startedAt       DateTime           @default(now())
   endedAt         DateTime?
   createdAt       DateTime           @default(now())
 
+  // Interview Integrity Tracking
+  integrityPolicyAcknowledgedAt DateTime?
+  integrityPolicyVersion        String?
+  violationCount                Int                @default(0)
+  terminationReason             String?
+
   answers         InterviewAnswer[]
   report          EvaluationReport?
   review          RecruiterReview?
+  integrityEvents InterviewIntegrityEvent[]
 
   @@index([userId])
 }
@@ -106,6 +113,8 @@ model EvaluationReport {
   recruiterFollowUps String?          // Serialized JSON string: RecruiterFollowUp[]
   skillStatusCounts  String?          // Serialized JSON string: { demonstrated, claimedUnvalidated, notAssessed }
   isDemoSimulation   Boolean          @default(false)
+  integrityStatus    String?          // "verified_clean" | "warning_issued" | "terminated_integrity"
+  integritySummary   String?          // Serialized JSON string: { incidents, events, policyVersion }
   createdAt          DateTime         @default(now())
 }
 
@@ -122,4 +131,25 @@ model RecruiterReview {
   reviewedBy    String?          // Display string fallback: "Sarah Jenkins (Head of Talent)"
   updatedAt     DateTime         @updatedAt
   createdAt     DateTime         @default(now())
+}
+
+// 7. Interview Focus-Loss & Integrity Audit Events
+model InterviewIntegrityEvent {
+  id                 String           @id @default(cuid())
+  sessionId          String
+  session            InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId             String?
+  eventType          String           // "focus_loss" | "visibility_hidden" | "window_blur"
+  eventNumber        Int              // 1 or 2
+  policyVersion      String           @default("v1.0")
+  stageQuestionId    String?
+  stageQuestionIndex Int?
+  actionTaken        String           // "warning_issued" | "interview_terminated"
+  idempotencyKey     String?          @unique
+  clientTimestamp    String?
+  serverTimestamp    DateTime         @default(now())
+  createdAt          DateTime         @default(now())
+
+  @@index([sessionId])
+  @@index([userId])
 }

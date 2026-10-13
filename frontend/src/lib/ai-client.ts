@@ -25,11 +25,12 @@ async function apiPost<T>(path: string, body: Record<string, unknown>): Promise<
  */
 export async function aiGenerateInitialQuestion(
   setup: CandidateSetup,
-  resumeText?: string
+  resumeText?: string,
+  sessionId?: string
 ): Promise<Question> {
   const data = await apiPost<{ question: Question }>(
     "/api/interview/generate-question",
-    { setup, previousQuestions: [], resumeText: resumeText || "" }
+    { sessionId, setup, previousQuestions: [], resumeText: resumeText || "" }
   );
   return data.question;
 }
@@ -40,11 +41,13 @@ export async function aiGenerateInitialQuestion(
 export async function aiEvaluateAnswer(
   question: Question,
   answerText: string,
-  setup: CandidateSetup
+  setup: CandidateSetup,
+  sessionId?: string
 ): Promise<AnswerFeedback> {
   const data = await apiPost<{ feedback: AnswerFeedback }>(
     "/api/interview/evaluate-answer",
     {
+      sessionId,
       question,
       answerText,
       candidateName: setup.candidateName,
@@ -63,17 +66,21 @@ export async function aiGetNextQuestion(
   lastQuestion: Question,
   lastAnswer: string,
   lastScore: number,
-  answerHistory: AnswerRecord[]
+  answerHistory: AnswerRecord[],
+  sessionId?: string,
+  lastFeedback?: Partial<AnswerFeedback>
 ): Promise<Question | null> {
   try {
     const questionsAsked = answerHistory.map((a) => a.questionText);
     const data = await apiPost<{ question: Question }>(
       "/api/interview/next-question",
       {
+        sessionId,
         setup,
         lastQuestion,
         lastAnswer,
         lastScore,
+        lastFeedback,
         answerHistory,
         questionsAsked,
       }

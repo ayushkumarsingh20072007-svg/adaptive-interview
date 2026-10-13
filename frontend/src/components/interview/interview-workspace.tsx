@@ -17,6 +17,7 @@ import {
   FileText,
   Eye,
   ShieldAlert,
+  ShieldCheck,
   ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,7 @@ import {
 
 import { evaluateAnswer as mockEvaluate, getNextAdaptiveQuestion as mockNextQ, getInitialQuestion as mockInitQ } from "@/lib/interview-engine";
 import { useIsMounted } from "@/lib/use-mounted";
+import { AiAssistantPanel } from "@/components/interview/ai-assistant-panel";
 import { useAuth } from "@/lib/auth-context";
 
 interface InterviewWorkspaceProps {
@@ -110,6 +112,32 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
   const [isAiPowered, setIsAiPowered] = React.useState(true);
   const isMounted = useIsMounted();
 
+  // Redirect unauthenticated candidates to login
+  React.useEffect(() => {
+    if (isMounted && !isAuthLoading && !user) {
+      router.replace(`/login?redirect=/interview/${encodeURIComponent(sessionId)}`);
+    }
+  }, [isMounted, isAuthLoading, user, sessionId, router]);
+
+  // Interview Integrity & Workspace Monitoring state
+  const [integrityAcknowledged, setIntegrityAcknowledged] = React.useState<boolean>(() => {
+    const stored = getStoredSession(sessionId);
+    return Boolean(stored?.integrityPolicyAcknowledgedAt);
+  });
+  const [showPolicyModal, setShowPolicyModal] = React.useState<boolean>(false);
+  const [violationCount, setViolationCount] = React.useState<number>(0);
+  const [showWarningModal, setShowWarningModal] = React.useState<boolean>(false);
+  const [isTerminatedByIntegrity, setIsTerminatedByIntegrity] = React.useState<boolean>(() => {
+    const stored = getStoredSession(sessionId);
+    return stored?.status === "terminated_integrity";
+  });
+  const [terminationReason, setTerminationReason] = React.useState<string | null>(null);
+  const [isAcknowledgingPolicy, setIsAcknowledgingPolicy] = React.useState<boolean>(false);
+
+  // Focus-loss state machine refs (guards against duplicate triggers and race conditions)
+  const isUnfocusedRef = React.useRef<boolean>(false);
+  const lastViolationTimeRef = React.useRef<number>(0);
+
   const currentSetup = getStoredSession(sessionId)?.setup || session.setup || getStoredSetup(user?.id);
   const hasResume = Boolean(
     currentSetup?.resumeFileName ||
@@ -120,13 +148,179 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
     session.setup?.isSampleResume
   );
 
-  // Sync session state from storage
+  // Sync session state from storage and server
   React.useEffect(() => {
     const stored = getStoredSession(sessionId);
     if (stored) {
       setSession(stored);
+      if (stored.status === "terminated_integrity") {
+        setIsTerminatedByIntegrity(true);
+      }
     }
-  }, [sessionId, user]);
+
+    let cancelled = false;
+    fetch(`/api/interview/session?id=${sessionId}`)
+      .then(async (res) => {
+        if (res.ok) {
+          const data = await res.json();
+          if (data.session && !cancelled) {
+            if (data.session.status === "terminated_integrity") {
+              setIsTerminatedByIntegrity(true);
+              setTerminationReason(
+                data.session.terminationReason ||
+                  "Exceeded allowable workspace focus-loss limit (2 of 2 incidents)"
+              );
+            }
+            if (data.session.violationCount) {
+              setViolationCount(data.session.violationCount);
+            }
+            if (data.session.integrityPolicyAcknowledgedAt) {
+              setIntegrityAcknowledged(true);
+              setShowPolicyModal(false);
+            } else if (!isDemo && data.session.status !== "terminated_integrity") {
+              setShowPolicyModal(true);
+            }
+          }
+        }
+      })
+      .catch((err) => console.warn("Could not sync server session status:", err));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, user, isDemo]);
+
+  // Focus-Loss Monitoring & Transition State Machine
+  React.useEffect(() => {
+    if (
+      !integrityAcknowledged ||
+      isTerminatedByIntegrity ||
+      session.status === "completed" ||
+      session.status === "terminated_integrity"
+    ) {
+      return;
+    }
+
+    const reportFocusLossTransition = async (eventType: string) => {
+      const now = Date.now();
+      // Configurable cooldown: prevent duplicate signals within 1200ms
+      if (now - lastViolationTimeRef.current < 1200) {
+        return;
+      }
+      lastViolationTimeRef.current = now;
+
+      const eventNonce = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+      try {
+        const res = await fetch("/api/interview/integrity/event", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: session.id,
+            eventType,
+            idempotencyKey: eventNonce,
+            stageQuestionId: currentQuestion?.id,
+            stageQuestionIndex: session.answers.length + 1,
+            clientTimestamp: new Date().toISOString(),
+            policyVersion: "v1.0",
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          setViolationCount(data.violationCount);
+
+          if (data.status === "terminated_integrity" || data.violationCount >= 2) {
+            setIsTerminatedByIntegrity(true);
+            setTerminationReason(
+              "Exceeded allowable workspace focus-loss limit (2 of 2 incidents)"
+            );
+            setShowWarningModal(false);
+            const terminatedSession = {
+              ...session,
+              status: "terminated_integrity" as const,
+              endedAt: new Date().toISOString(),
+              violationCount: data.violationCount,
+              terminationReason: "Exceeded allowable workspace focus-loss limit (2 of 2 incidents)",
+            };
+            setSession(terminatedSession);
+            saveStoredSession(terminatedSession);
+          } else if (data.violationCount === 1) {
+            setShowWarningModal(true);
+          }
+        }
+      } catch (err) {
+        console.warn("[InterviewIQ Integrity] Focus reporting error:", err);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        if (!isUnfocusedRef.current) {
+          isUnfocusedRef.current = true;
+          reportFocusLossTransition("visibility_hidden");
+        }
+      } else if (document.visibilityState === "visible") {
+        isUnfocusedRef.current = false;
+      }
+    };
+
+    const handleWindowBlur = () => {
+      if (!isUnfocusedRef.current) {
+        isUnfocusedRef.current = true;
+        reportFocusLossTransition("window_blur");
+      }
+    };
+
+    const handleWindowFocus = () => {
+      isUnfocusedRef.current = false;
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("blur", handleWindowBlur);
+    window.addEventListener("focus", handleWindowFocus);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("blur", handleWindowBlur);
+      window.removeEventListener("focus", handleWindowFocus);
+    };
+  }, [
+    integrityAcknowledged,
+    isTerminatedByIntegrity,
+    session.status,
+    session.id,
+    session.answers.length,
+    currentQuestion?.id,
+  ]);
+
+  async function handleAcknowledgePolicy() {
+    setIsAcknowledgingPolicy(true);
+    try {
+      const res = await fetch("/api/interview/integrity/ack-policy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.id, policyVersion: "v1.0" }),
+      });
+      if (res.ok) {
+        setIntegrityAcknowledged(true);
+        setShowPolicyModal(false);
+        const updated = {
+          ...session,
+          integrityPolicyAcknowledgedAt: new Date().toISOString(),
+          integrityPolicyVersion: "v1.0",
+        };
+        setSession(updated);
+        saveStoredSession(updated);
+      }
+    } catch (err) {
+      console.warn("Policy acknowledgement request failed:", err);
+      setIntegrityAcknowledged(true);
+      setShowPolicyModal(false);
+    } finally {
+      setIsAcknowledgingPolicy(false);
+    }
+  }
 
   // On mount: generate first AI question
   React.useEffect(() => {
@@ -151,8 +345,8 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
         targetSetup.isSampleResume
       );
 
-      // Do not generate questions if not demo and unauthenticated or missing resume
-      if (!isDemo && (!user || !hasValidResume)) {
+      // Do not generate questions if unauthenticated or missing resume
+      if (!user || (!isDemo && !hasValidResume)) {
         if (!cancelled) {
           setAiStatus("ready");
         }
@@ -195,7 +389,7 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
 
       // Fresh session: generate first question
       try {
-        const q = await aiGenerateInitialQuestion(targetSetup, targetSetup.resumeText);
+        const q = await aiGenerateInitialQuestion(targetSetup, targetSetup.resumeText, sessionId);
         if (!cancelled) {
           setCurrentQuestion(q);
           setAiStatus("ready");
@@ -262,6 +456,11 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
   }
 
   async function handleSubmitAnswer(forceCurated = false) {
+    if (isTerminatedByIntegrity || session?.status === "terminated_integrity") {
+      setInputError("This interview session has been terminated. Further answer submissions are disabled.");
+      return;
+    }
+
     if (!answerText.trim() || answerText.trim().length < 15) {
       setInputError("Please provide a substantive answer (at least 15 characters).");
       return;
@@ -280,7 +479,7 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
       let feedback: AnswerFeedback;
 
       if (useAi) {
-        feedback = await aiEvaluateAnswer(currentQuestion, answerText, session.setup);
+        feedback = await aiEvaluateAnswer(currentQuestion, answerText, session.setup, session.id);
       } else {
         await new Promise((r) => setTimeout(r, 400));
         feedback = mockEvaluate(currentQuestion, answerText);
@@ -310,7 +509,16 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId: session.id, answer: record }),
-      }).catch((err) => console.warn("Failed to persist answer to server:", err));
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            if (errData.error?.includes("terminated")) {
+              setIsTerminatedByIntegrity(true);
+            }
+          }
+        })
+        .catch((err) => console.warn("Failed to persist answer to server:", err));
 
       if (isLastQuestion) {
         handleCompleteInterview(updatedSession);
@@ -329,7 +537,9 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
             currentQuestion,
             answerText,
             feedback.score,
-            updatedAnswers
+            updatedAnswers,
+            session.id,
+            feedback
           );
         } else {
           nextQ = mockNextQ(currentQuestion, answerText, updatedSession);
@@ -437,8 +647,8 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
     );
   }
 
-  // Blocker 1: Must be authenticated if not a demo session
-  if (!isDemo && !user) {
+  // Blocker 1: Must be authenticated
+  if (!user) {
     return (
       <div className="flex flex-col items-center justify-center max-w-md mx-auto py-20 text-center space-y-4">
         <div className="h-14 w-14 rounded-2xl bg-amber-950/40 border border-amber-800/60 flex items-center justify-center text-amber-400">
@@ -452,10 +662,10 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
           </p>
         </div>
         <div className="flex items-center gap-3 pt-2">
-          <Link href="/login">
+          <Link href={`/login?redirect=/interview/${encodeURIComponent(sessionId)}`}>
             <Button size="sm" className="bg-indigo-600 hover:bg-indigo-500">Sign In</Button>
           </Link>
-          <Link href="/signup">
+          <Link href={`/signup?redirect=/interview/${encodeURIComponent(sessionId)}`}>
             <Button variant="outline" size="sm" className="border-slate-800">Create Account</Button>
           </Link>
         </div>
@@ -483,6 +693,60 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
           </Link>
           <Link href="/dashboard">
             <Button variant="outline" size="sm" className="border-slate-800">Return to Dashboard</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Blocker 3: Session terminated due to focus-loss / integrity policy
+  if (isTerminatedByIntegrity || session.status === "terminated_integrity") {
+    return (
+      <div className="flex flex-col items-center justify-center max-w-xl mx-auto py-16 px-4 text-center space-y-6">
+        <div className="h-16 w-16 rounded-2xl bg-rose-950/40 border border-rose-800/60 flex items-center justify-center text-rose-400 shadow-lg">
+          <ShieldAlert className="h-8 w-8" />
+        </div>
+        <div className="space-y-2">
+          <Badge variant="danger" className="text-xs px-3 py-1 font-semibold uppercase tracking-wider">
+            Integrity Policy Triggered
+          </Badge>
+          <h2 className="text-2xl font-bold text-white tracking-tight mt-2">
+            Interview Session Terminated
+          </h2>
+          <p className="text-sm text-slate-300 leading-relaxed max-w-lg mx-auto">
+            This interview session was automatically concluded because the allowable workspace focus-loss limit was reached
+            (2 of 2 incidents recorded).
+          </p>
+        </div>
+
+        <div className="w-full text-left bg-[#0c1427]/80 border border-slate-800/80 rounded-2xl p-5 space-y-3.5 text-xs text-slate-300 shadow-md">
+          <div className="flex items-start gap-2.5">
+            <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+            <span>
+              <strong className="text-white">Submitted Answers Preserved:</strong> All {session.answers.length} response(s) submitted prior to termination remain fully intact and saved in your evaluation record.
+            </span>
+          </div>
+          <div className="flex items-start gap-2.5">
+            <AlertCircle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+            <span>
+              <strong className="text-white">Objective Policy Signal:</strong> Focus loss represents a browser window or tab transition signal and is reviewed by recruiting teams in context. It is never labeled as proven cheating or misconduct.
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 w-full pt-2">
+          <Button
+            size="sm"
+            onClick={() => handleCompleteInterview()}
+            className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 font-semibold gap-2"
+          >
+            <span>View Evaluation Report</span>
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+          <Link href="/dashboard" className="w-full sm:w-auto">
+            <Button variant="outline" size="sm" className="w-full border-slate-800 hover:bg-slate-800/60">
+              Return to Dashboard
+            </Button>
           </Link>
         </div>
       </div>
@@ -577,6 +841,17 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
                 <Badge variant="default" className="gap-1 text-[10px] py-0.5 px-2">
                   <Cpu className="h-2.5 w-2.5" />
                   Curated
+                </Badge>
+              )}
+              {violationCount === 1 ? (
+                <Badge variant="warning" className="gap-1 text-[10px] py-0.5 px-2">
+                  <AlertCircle className="h-2.5 w-2.5 text-amber-400" />
+                  Warning 1/2
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="gap-1 text-[10px] py-0.5 px-2 border-emerald-500/30 text-emerald-400 bg-emerald-950/20">
+                  <ShieldCheck className="h-2.5 w-2.5 text-emerald-400" />
+                  Focus Monitored
                 </Badge>
               )}
             </div>
@@ -851,6 +1126,17 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
               )}
             </CardContent>
           </Card>
+
+          {/* AI Assistant — Interview Mode (locked) */}
+          <AiAssistantPanel
+            mode="interview"
+            sessionId={sessionId}
+            questionTopic={currentQuestion?.questionText}
+            questionCategory={currentQuestion?.category}
+            targetRole={session.setup.targetRole}
+            experienceLevel={session.setup.experienceLevel}
+            defaultCollapsed={false}
+          />
         </div>
       </div>
 
@@ -981,6 +1267,98 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
           </div>
         </Modal>
       )}
+
+      {/* Pre-Interview Integrity Policy Modal */}
+      <Modal
+        isOpen={showPolicyModal && !integrityAcknowledged}
+        onClose={() => {}}
+        title="Interview Workspace Integrity Policy"
+        description="Please review and acknowledge the active workspace focus policy before beginning."
+        className="max-w-xl"
+      >
+        <div className="space-y-4 text-xs text-slate-300">
+          <div className="p-4 rounded-xl bg-indigo-950/40 border border-indigo-800/60 text-slate-300 space-y-2.5">
+            <p className="font-semibold text-white text-sm flex items-center gap-2">
+              <ShieldCheck className="h-4.5 w-4.5 text-indigo-400 shrink-0" />
+              Focus & Integrity Guidelines (Policy v1.0)
+            </p>
+            <ul className="space-y-2 list-disc list-inside text-slate-300 leading-relaxed text-xs">
+              <li>
+                <strong className="text-white">Active page required:</strong> The interview page must remain visible and active during your technical session.
+              </li>
+              <li>
+                <strong className="text-white">Warning policy:</strong> A first confirmed focus-loss transition issues <span className="text-amber-300 font-semibold">Warning 1 of 2</span>.
+              </li>
+              <li>
+                <strong className="text-white">Session termination:</strong> A second confirmed focus-loss incident automatically concludes the interview.
+              </li>
+              <li>
+                <strong className="text-white">Objective monitoring signal:</strong> Focus changes represent window/tab transition signals, not conclusive proof of cheating. Accidental focus changes can happen and are reviewed in context.
+              </li>
+              <li>
+                <strong className="text-white">No camera required:</strong> This feature solely tracks browser tab visibility and window focus. Webcam access is not required.
+              </li>
+            </ul>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <Button
+              size="sm"
+              disabled={isAcknowledgingPolicy}
+              onClick={handleAcknowledgePolicy}
+              className="bg-indigo-600 hover:bg-indigo-500 font-semibold gap-2"
+            >
+              {isAcknowledgingPolicy ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Recording Consent...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4" />
+                  Acknowledge & Begin Monitored Interview
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Warning 1 of 2 Focus-Loss Modal */}
+      <Modal
+        isOpen={showWarningModal}
+        onClose={() => setShowWarningModal(false)}
+        title="Warning 1 of 2 — Workspace Focus Loss"
+        description="Your interview page lost focus or visibility."
+        className="max-w-md"
+      >
+        <div className="space-y-4 text-xs text-slate-300">
+          <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-800/60 text-amber-200 space-y-2">
+            <div className="flex items-center gap-2 font-bold text-amber-300 text-sm">
+              <AlertCircle className="h-4.5 w-4.5 text-amber-400 shrink-0" />
+              <span>Warning 1 of 2</span>
+            </div>
+            <p className="leading-relaxed">
+              Your interview page lost focus. Please remain on the interview page.
+              A second confirmed incident will end this interview.
+            </p>
+          </div>
+
+          <p className="text-slate-400 text-[11px] leading-relaxed">
+            Your current question, entered response text, and previous answers remain fully preserved.
+          </p>
+
+          <div className="flex justify-end pt-2">
+            <Button
+              size="sm"
+              onClick={() => setShowWarningModal(false)}
+              className="bg-amber-600 hover:bg-amber-500 text-white font-semibold"
+            >
+              I Understand & Resume Interview
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

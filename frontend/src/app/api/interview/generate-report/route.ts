@@ -26,6 +26,9 @@ export async function POST(req: NextRequest) {
     // Check if session exists in DB and belongs to a different candidate
     const existingDbSession = await prisma.interviewSession.findUnique({
       where: { id: session.id },
+      include: {
+        integrityEvents: { orderBy: { createdAt: "asc" } },
+      },
     });
 
     if (existingDbSession && existingDbSession.userId) {
@@ -37,6 +40,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const isTerminated =
+      existingDbSession?.status === "terminated_integrity" ||
+      session.status === "terminated_integrity";
+
     const answers = session.answers || [];
     const totalAnswers = answers.length;
 
@@ -47,12 +54,16 @@ export async function POST(req: NextRequest) {
       if (auth.user?.name) {
         report.candidateName = auth.user.name;
       }
+      if (isTerminated) {
+        report.verdict = "Terminated (Integrity Policy)";
+        report.integrityStatus = "terminated_integrity";
+      }
       report.isDemoSimulation = true;
       const savedReport = await persistReport(report, session, effectiveUserId);
       return NextResponse.json({ report: savedReport });
     }
 
-    let averageScore = 80;
+    let averageScore = 0;
     if (totalAnswers > 0) {
       const sum = answers.reduce((acc, curr) => acc + curr.feedback.score, 0);
       averageScore = Math.round(sum / totalAnswers);
@@ -61,7 +72,7 @@ export async function POST(req: NextRequest) {
     const transcript = answers
       .map(
         (a, idx) =>
-          `[Question ${idx + 1}] (${a.category} - ${a.difficulty}): "${a.questionText}"\n[Candidate Answer]: "${a.answerText}"\n[Turn Score]: ${a.feedback.score}/100\n[Strengths]: ${a.feedback.strengths.join("; ")}\n[Gaps]: ${a.feedback.gaps.join("; ")}`
+          `[Question ${idx + 1}] (${a.category} - ${a.difficulty}): "${a.questionText}"\n[Candidate Answer]: "${a.answerText}"\n[Turn Score]: ${a.feedback.score}/100\n[Strengths]: ${a.feedback.strengths.join("; ") || "None"}\n[Gaps]: ${a.feedback.gaps.join("; ") || "None"}`
       )
       .join("\n\n");
 
@@ -79,18 +90,21 @@ TRANSCRIPT:
 ${transcript || "No candidate answers recorded."}
 
 EVALUATION RUBRIC & INSTRUCTIONS:
-1. Evaluate 3 to 5 competencies tested in the interview.
-2. For each competency, determine the skill status:
+1. Ground competency scores strictly in the candidate's actual answer performance:
+   - If answers were incorrect, flawed, or evasive (scores < 50), the competency score MUST be low (20-45) and marked 'claimed_unvalidated' with level 'Needs Focus' or 'Developing'.
+   - Do NOT inflate scores or award unearned marks to wrong answers.
+2. Evaluate 3 to 5 competencies tested in the interview.
+3. For each competency, determine the skill status:
    - "demonstrated": sufficient answer evidence supports the skill with clear conceptual or practical execution.
    - "claimed_unvalidated": claimed in resume/skills or attempted, but answer was vague, weak, incorrect, or lacked depth.
    - "not_assessed": skill was not sufficiently tested or questioned in this session.
-3. Ground every assessment in VERBATIM candidate quotes:
+4. Ground every assessment in VERBATIM candidate quotes:
    - "evidenceQuote" and "quote" MUST be exact word-for-word substrings of the candidate's actual answer text from the transcript.
    - If no verbatim supporting quote exists, return an empty string "" for quote and state why evidence is insufficient.
    - Do NOT fabricate, rephrase, or hallucinate candidate statements.
-4. Pinpoint exact mistakes, misconceptions, and shallow explanations in candidate responses under "areasToImprove" (explain specifically what was incorrect or missing in their answers).
-5. Outline a prioritized, practical learning and practice roadmap under "actionableRoadmap" (what exact technical concepts, design trade-offs, and tools the candidate should focus on before real company interviews).
-6. Generate 2 to 3 targeted "recruiterFollowUps" for human recruiters in round two to probe unvalidated claims or test depth.
+5. Pinpoint exact mistakes, misconceptions, and shallow explanations in candidate responses under "areasToImprove" (explain specifically what was incorrect or missing in their answers).
+6. Outline a prioritized, practical learning and practice roadmap under "actionableRoadmap" (what exact technical concepts, design trade-offs, and tools the candidate should focus on before real company interviews).
+7. Generate 2 to 3 targeted "recruiterFollowUps" for human recruiters in round two to probe unvalidated claims or test depth.
 
 Respond ONLY with valid JSON (no markdown formatting, no code fences):
 {
@@ -155,12 +169,12 @@ Respond ONLY with valid JSON (no markdown formatting, no code fences):
       "Additional Review Recommended",
     ] as const;
     let verdict: EvaluationReport["verdict"] = "Hire Recommendation";
-    if (aiReport.verdict && (validVerdicts as readonly string[]).includes(aiReport.verdict)) {
-      verdict = aiReport.verdict as EvaluationReport["verdict"];
-    } else if (averageScore >= 88) {
-      verdict = "Strong Hire Recommendation";
-    } else if (averageScore < 72) {
+    if (averageScore < 68) {
       verdict = "Additional Review Recommended";
+    } else if (aiReport.verdict && (validVerdicts as readonly string[]).includes(aiReport.verdict)) {
+      verdict = aiReport.verdict as EvaluationReport["verdict"];
+    } else if (averageScore >= 85) {
+      verdict = "Strong Hire Recommendation";
     }
 
     const ROLE_LABELS: Record<string, string> = {
@@ -273,6 +287,8 @@ Respond ONLY with valid JSON (no markdown formatting, no code fences):
       uncertaintyLevel: rf.uncertaintyLevel || "medium",
     }));
 
+    const finalVerdict = isTerminated ? "Terminated (Integrity Policy)" : verdict;
+
     const report: EvaluationReport = {
       sessionId: session.id,
       candidateName: auth.user?.name || session.setup?.candidateName || "Candidate",
@@ -282,7 +298,7 @@ Respond ONLY with valid JSON (no markdown formatting, no code fences):
       completedAt: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
       durationMinutes: Math.max(1, Math.round((session.durationSeconds || 0) / 60)),
       overallScore: averageScore,
-      verdict,
+      verdict: finalVerdict,
       metrics,
       strengths: (aiReport.strengths || []).slice(0, 3),
       areasToImprove: (aiReport.areasToImprove || []).slice(0, 3),
@@ -293,6 +309,11 @@ Respond ONLY with valid JSON (no markdown formatting, no code fences):
       evidenceCitations: verifiedCitations,
       recruiterFollowUps,
       skillStatusCounts,
+      integrityStatus: isTerminated
+        ? "terminated_integrity"
+        : (existingDbSession?.violationCount || 0) > 0
+        ? "warning_issued"
+        : "verified_clean",
     };
 
     // Persist completed report to SQLite with idempotency

@@ -20,6 +20,8 @@ import {
   ShieldCheck,
   Check,
   LogOut,
+  Lock,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
@@ -36,10 +38,18 @@ import {
 import { ROLE_LABELS, ROLE_SKILLS, SAMPLE_CANDIDATE } from "@/lib/mock-data";
 import { saveStoredSetup, getStoredSetup } from "@/lib/storage";
 import { useAuth } from "@/lib/auth-context";
+import { useIsMounted } from "@/lib/use-mounted";
 
 export default function CandidateSetupPage() {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, isLoading } = useAuth();
+  const isMounted = useIsMounted();
+
+  React.useEffect(() => {
+    if (isMounted && !isLoading && !user) {
+      router.replace("/login?redirect=/setup");
+    }
+  }, [isMounted, isLoading, user, router]);
 
   // Initialize state with static defaults for SSR, hydrate in useEffect
   const [candidateName, setCandidateName] = React.useState<string>("");
@@ -277,6 +287,46 @@ export default function CandidateSetupPage() {
     { role: "data-analyst", desc: "SQL, Cohort Analytics, Data Modeling" },
   ];
 
+  if (!isMounted || isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3 text-slate-400">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-400" />
+        <p className="text-xs">Checking authentication session...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center p-4">
+        <Card className="max-w-md w-full p-8 border-slate-800 bg-[#0e1628] text-center space-y-5 shadow-2xl">
+          <div className="h-12 w-12 rounded-xl bg-indigo-950/60 border border-indigo-700/50 flex items-center justify-center text-indigo-400 mx-auto">
+            <Lock className="h-6 w-6" />
+          </div>
+          <div className="space-y-1.5">
+            <Badge variant="indigo" className="text-[10px]">Candidate Setup</Badge>
+            <h2 className="text-xl font-bold text-white">Sign In Required</h2>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              You must sign in to configure your adaptive technical interview, upload your resume, and track your performance scorecards.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
+            <Link href="/login?redirect=/setup" className="flex-1">
+              <Button className="w-full bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold h-9">
+                Sign In
+              </Button>
+            </Link>
+            <Link href="/signup?redirect=/setup" className="flex-1">
+              <Button variant="outline" className="w-full text-xs border-slate-700 hover:bg-slate-800/60 h-9">
+                Create Account
+              </Button>
+            </Link>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6 max-w-4xl mx-auto w-full py-4">
       {/* Header */}
@@ -301,55 +351,32 @@ export default function CandidateSetupPage() {
         </Link>
       </div>
 
-      {/* Auth or Guest Mode Notification Banner */}
-      {user ? (
-        <div className="rounded-2xl border border-emerald-800/60 bg-emerald-950/25 px-5 py-3.5 text-xs text-emerald-300 flex items-center justify-between flex-wrap gap-3 shadow-sm">
-          <div className="flex items-center gap-2.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>
-              Signed in as <strong className="text-white">{user.name}</strong> ({user.email}). Your interview results will link to your account.
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="success" className="text-xs py-0.5 px-2">Authenticated</Badge>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={async () => {
-                await logout();
-                router.refresh();
-              }}
-              className="text-xs text-rose-300 hover:text-white hover:bg-rose-950/40 gap-1.5 h-7.5 px-2.5 rounded-lg"
-              title="Log out of this account"
-            >
-              <LogOut className="h-3.5 w-3.5 text-rose-400" />
-              <span>Log Out</span>
-            </Button>
-          </div>
+      {/* Authenticated Mode Banner */}
+      <div className="rounded-2xl border border-emerald-800/60 bg-emerald-950/25 px-5 py-3.5 text-xs text-emerald-300 flex items-center justify-between flex-wrap gap-3 shadow-sm">
+        <div className="flex items-center gap-2.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span>
+            Signed in as <strong className="text-white">{user.name}</strong> ({user.email}). Your interview results will link to your account.
+          </span>
         </div>
-      ) : (
-        <div className="rounded-2xl border border-amber-800/60 bg-amber-950/30 px-5 py-4 text-xs text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
-          <div className="flex items-center gap-3">
-            <AlertCircle className="h-5 w-5 text-amber-400 shrink-0" />
-            <span className="leading-relaxed">
-              <strong>Authentication & Resume Required:</strong> Please sign in or register and upload your resume to calibrate adaptive questions.
-            </span>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Link href="/login">
-              <Button size="sm" variant="outline" className="text-xs h-8 px-3.5 rounded-xl border-amber-700/60 text-amber-200 hover:bg-amber-900/40">
-                Sign In
-              </Button>
-            </Link>
-            <Link href="/signup">
-              <Button size="sm" className="text-xs h-8 px-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium">
-                Register
-              </Button>
-            </Link>
-          </div>
+        <div className="flex items-center gap-2">
+          <Badge variant="success" className="text-xs py-0.5 px-2">Authenticated</Badge>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={async () => {
+              await logout();
+              router.refresh();
+            }}
+            className="text-xs text-rose-300 hover:text-white hover:bg-rose-950/40 gap-1.5 h-7.5 px-2.5 rounded-lg"
+            title="Log out of this account"
+          >
+            <LogOut className="h-3.5 w-3.5 text-rose-400" />
+            <span>Log Out</span>
+          </Button>
         </div>
-      )}
+      </div>
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 

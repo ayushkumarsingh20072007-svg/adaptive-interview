@@ -116,7 +116,7 @@ export function Navbar() {
           )}
 
           {!user && (
-            <Link href="/setup">
+            <Link href="/login?redirect=/setup">
               <Button size="sm" className="gap-2 shadow-sm bg-indigo-600 hover:bg-indigo-500">
                 Start Interview
                 <ArrowRight className="h-3.5 w-3.5" />
@@ -128,7 +128,7 @@ export function Navbar() {
         {/* Mobile Hamburger Button */}
         <div className="flex items-center md:hidden gap-2">
           {!user && (
-            <Link href="/setup">
+            <Link href="/login?redirect=/setup">
               <Button size="sm" className="text-xs px-2.5 h-8 bg-indigo-600 hover:bg-indigo-500">
                 Start
               </Button>
@@ -199,7 +199,7 @@ export function Navbar() {
               )
             )}
 
-            <Link href="/setup" onClick={() => setMobileMenuOpen(false)}>
+            <Link href={user ? "/setup" : "/login?redirect=/setup"} onClick={() => setMobileMenuOpen(false)}>
               <Button className="w-full gap-2 justify-center bg-indigo-600 hover:bg-indigo-500">
                 Start Interview
                 <ArrowRight className="h-4 w-4" />

@@ -42,6 +42,9 @@ export async function GET(req: NextRequest) {
       where: { id },
       include: {
         answers: true,
+        integrityEvents: {
+          orderBy: { createdAt: "asc" },
+        },
       },
     });
 

@@ -21,6 +21,9 @@ export async function POST(req: NextRequest) {
     if (err?.message?.includes("Unauthorized session access")) {
       return NextResponse.json({ error: "Forbidden: Cannot submit answers to another candidate's session" }, { status: 403 });
     }
+    if (err?.message?.includes("terminated interview session")) {
+      return NextResponse.json({ error: "Forbidden: Cannot submit answers to a terminated interview session" }, { status: 403 });
+    }
     console.error("[api/interview/answer] Error:", err);
     return NextResponse.json({ error: "Failed to persist answer record" }, { status: 500 });
   }

@@ -5,6 +5,7 @@ import {
   InterviewSession,
   EvaluationReport,
   SkillMetric,
+  SkillStatusCategory,
 } from "./types";
 import { QUESTION_BANK, ROLE_LABELS } from "./mock-data";
 import { saveStoredSession, saveStoredReport } from "./storage";
@@ -41,7 +42,54 @@ export function getInitialQuestion(setup: CandidateSetup): Question {
  * Evaluates technical keyword matches, conceptual depth, and structure.
  */
 export function evaluateAnswer(question: Question, answerText: string): AnswerFeedback {
-  const normalized = answerText.toLowerCase().trim();
+  const raw = answerText.trim();
+  const normalized = raw.toLowerCase();
+
+  // 1. Detect evasive, empty, or refusal answers
+  const evasivePhrases = [
+    "don't know",
+    "dont know",
+    "no idea",
+    "not sure",
+    "skip",
+    "pass",
+    "idk",
+    "no clue",
+    "cannot answer",
+    "can't answer",
+    "n/a",
+    "wrong",
+    "asdf",
+    "test",
+    "nothing",
+  ];
+  const isEvasive = evasivePhrases.some(
+    (phrase) => normalized === phrase || normalized.startsWith(phrase + " ") || normalized.endsWith(" " + phrase)
+  );
+  const isTooShort = normalized.length < 15;
+
+  if (isEvasive || isTooShort) {
+    const penaltyScore = isEvasive ? 10 : Math.max(10, Math.min(25, Math.round(normalized.length * 1.5)));
+    return {
+      score: penaltyScore,
+      strengths: [],
+      gaps: [
+        `Candidate did not provide a substantive technical explanation for '${question.category}'.`,
+        `Expected foundational concepts: ${question.expectedKeywords.slice(0, 3).join(", ")}.`,
+      ],
+      adaptiveNote: "Calibrating next question toward fundamental conceptual building blocks.",
+      technicalCorrectness: "incorrect",
+      explanationQuality: "confusing",
+      reasoningAndProblemSolving: "Candidate provided an evasive or insufficient response.",
+      completeness: "incomplete",
+      evidenceQuote: null,
+      missingConcepts: [...question.expectedKeywords],
+      competencyStatus: "claimed_unvalidated",
+      confidence: "high",
+    };
+  }
+
+  // 2. Keyword and concept match analysis
   const matchedKeywords: string[] = [];
   const missingKeywords: string[] = [];
 
@@ -53,54 +101,102 @@ export function evaluateAnswer(question: Question, answerText: string): AnswerFe
     }
   }
 
-  // Base score calculation based on length and keywords
-  let baseScore = 72;
+  const totalKw = Math.max(1, question.expectedKeywords.length);
+  const matchRatio = matchedKeywords.length / totalKw;
 
-  // Length check bonus (encourages articulated reasoning)
-  if (normalized.length > 80) baseScore += 5;
-  if (normalized.length > 200) baseScore += 5;
+  // 3. Calibrated Scoring:
+  // - 0 keywords matched: candidate fundamentally missed the technical topic (score 15 - 35)
+  // - Partial match (0.1 - 0.4): weak attempt with missing core components (score 36 - 55)
+  // - Moderate match (0.4 - 0.7): acceptable foundational explanation (score 58 - 74)
+  // - Strong match (>= 0.7): accurate, depth, keywords matched (score 76 - 95)
+  let calculatedScore: number;
 
-  // Keyword match contribution
-  const matchRatio = question.expectedKeywords.length > 0 
-    ? matchedKeywords.length / question.expectedKeywords.length 
-    : 0.5;
-  const keywordScore = Math.round(matchRatio * 16);
+  if (matchedKeywords.length === 0) {
+    calculatedScore = Math.min(35, 15 + Math.min(15, Math.round(normalized.length / 25)));
+  } else if (matchRatio < 0.4) {
+    calculatedScore = Math.round(35 + matchRatio * 45 + (normalized.length > 100 ? 5 : 0));
+  } else if (matchRatio < 0.7) {
+    calculatedScore = Math.round(55 + matchRatio * 28 + (normalized.length > 120 ? 5 : 0));
+  } else {
+    calculatedScore = Math.round(75 + matchRatio * 18 + (normalized.length > 150 ? 5 : 0));
+  }
 
-  const finalScore = Math.min(96, Math.max(65, baseScore + keywordScore));
+  const finalScore = Math.min(98, Math.max(10, calculatedScore));
 
   // Determine strengths
   const strengths: string[] = [];
   if (matchedKeywords.length > 0) {
     strengths.push(
-      `Accurately integrated core terminology: ${matchedKeywords.slice(0, 3).join(", ")}.`
+      `Referenced relevant concepts: ${matchedKeywords.slice(0, 3).join(", ")}.`
     );
   }
-  if (normalized.length > 150) {
-    strengths.push("Provided concrete architectural rationale rather than brief definitions.");
-  } else {
-    strengths.push("Direct and concise conceptual explanation.");
+  if (finalScore >= 70 && normalized.length > 120) {
+    strengths.push("Articulated practical reasoning with structured architectural flow.");
   }
 
   // Determine gaps
   const gaps: string[] = [];
   if (missingKeywords.length > 0) {
     gaps.push(
-      `Could explicitly address trade-offs regarding: ${missingKeywords.slice(0, 2).join(", ")}.`
+      `Missing technical coverage for: ${missingKeywords.slice(0, 3).join(", ")}.`
     );
-  } else {
-    gaps.push("Could further explore failure edge-cases and fallback degradation strategies.");
+  }
+  if (finalScore < 60) {
+    gaps.push("Answer lacked technical accuracy and core architectural depth.");
   }
 
   // Adaptive note
-  const adaptiveNote = matchedKeywords.length >= 2
-    ? "Identified advanced conceptual grasp; adapting follow-up toward edge cases and scalability."
-    : "Calibrating next question to evaluate fundamental structural patterns.";
+  const adaptiveNote =
+    finalScore >= 75
+      ? "Identified solid proficiency; advancing difficulty toward edge-cases and distributed scale."
+      : finalScore >= 50
+      ? "Identified partial understanding; probing specific trade-offs and structural mechanics."
+      : "Low technical accuracy detected; shifting follow-up to core fundamental concepts.";
+
+  // Extract verified verbatim evidence quote from candidate's actual answer text
+  let evidenceQuote: string | null = null;
+  if (matchedKeywords.length > 0) {
+    // Locate the first sentence or clause in raw text containing any matched keyword
+    const sentences = raw.split(/(?<=[.!?\n])\s+/);
+    for (const sentence of sentences) {
+      const sentenceLower = sentence.toLowerCase();
+      if (matchedKeywords.some((kw) => sentenceLower.includes(kw.toLowerCase())) && sentence.trim().length >= 10) {
+        evidenceQuote = sentence.trim();
+        break;
+      }
+    }
+    // Fallback: substring around first keyword if no sentence split matched
+    if (!evidenceQuote && raw.length >= 10) {
+      evidenceQuote = raw.slice(0, Math.min(180, raw.length)).trim();
+    }
+  }
+
+  const technicalCorrectness = finalScore >= 75 ? "accurate" : finalScore >= 50 ? "partial" : "incorrect";
+  const explanationQuality = finalScore >= 75 ? "clear" : finalScore >= 50 ? "acceptable" : "confusing";
+  const completeness = finalScore >= 80 ? "complete" : finalScore >= 50 ? "partially_complete" : "incomplete";
+  const competencyStatus: SkillStatusCategory =
+    finalScore >= 75 && Boolean(evidenceQuote && evidenceQuote.length >= 10)
+      ? "demonstrated"
+      : "claimed_unvalidated";
 
   return {
     score: finalScore,
     strengths,
     gaps,
     adaptiveNote,
+    technicalCorrectness,
+    explanationQuality,
+    reasoningAndProblemSolving:
+      finalScore >= 75
+        ? "Candidate demonstrated coherent architectural reasoning with technical concept linkages."
+        : finalScore >= 50
+        ? "Candidate demonstrated partial conceptual understanding with gaps in practical edge cases."
+        : "Candidate did not articulate sound technical mechanics or core problem-solving flow.",
+    completeness,
+    evidenceQuote,
+    missingConcepts: missingKeywords,
+    competencyStatus,
+    confidence: isEvasive ? "high" : matchRatio >= 0.7 ? "high" : matchRatio >= 0.4 ? "medium" : "low",
   };
 }
 
@@ -149,10 +245,10 @@ export function getNextAdaptiveQuestion(
  * Synthesizes an evaluation report from a completed or ended interview session.
  */
 export function generateEvaluationReport(session: InterviewSession): EvaluationReport {
-  const answers = session.answers;
+  const answers = session?.answers || [];
   const totalAnswers = answers.length;
 
-  let averageScore = 80;
+  let averageScore = 0;
   if (totalAnswers > 0) {
     const sum = answers.reduce((acc, curr) => acc + curr.feedback.score, 0);
     averageScore = Math.round(sum / totalAnswers);
@@ -170,16 +266,17 @@ export function generateEvaluationReport(session: InterviewSession): EvaluationR
 
   // Always ensure at least 2 metrics
   if (categoryMap.size === 0) {
-    categoryMap.set("Core Architecture", { sum: 85, count: 1 });
-    categoryMap.set("Problem Solving", { sum: 82, count: 1 });
+    categoryMap.set("Core Architecture", { sum: 0, count: 1 });
+    categoryMap.set("Problem Solving", { sum: 0, count: 1 });
   }
 
   const metrics: SkillMetric[] = Array.from(categoryMap.entries()).map(([cat, data], idx) => {
     const catScore = Math.round(data.sum / data.count);
-    let level: SkillMetric["level"] = "Proficient";
-    if (catScore >= 90) level = "Mastery";
-    else if (catScore < 75) level = "Needs Focus";
-    else if (catScore < 82) level = "Developing";
+    let level: SkillMetric["level"] = "Developing";
+    if (catScore >= 85) level = "Mastery";
+    else if (catScore >= 70) level = "Proficient";
+    else if (catScore >= 50) level = "Developing";
+    else level = "Needs Focus";
 
     const relevantAnswer = answers.find((a) => a.category === cat);
     let quote = "";
@@ -190,11 +287,9 @@ export function generateEvaluationReport(session: InterviewSession): EvaluationR
     }
 
     const status: SkillMetric["status"] =
-      catScore >= 75 && quote
+      catScore >= 70 && quote
         ? "demonstrated"
-        : catScore < 65 || !quote
-        ? "claimed_unvalidated"
-        : "demonstrated";
+        : "claimed_unvalidated";
 
     return {
       category: cat,

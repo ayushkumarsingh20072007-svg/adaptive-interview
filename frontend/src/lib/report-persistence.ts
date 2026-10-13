@@ -69,6 +69,50 @@ export function mapDbReportToDomain(
   // Never leak recruiter-only review notes to candidates
   const shortlistNotes = options?.isRecruiter ? (review?.notes || undefined) : undefined;
 
+  // Map integrity metadata
+  const integritySummaryFromDb = safeJsonParse<EvaluationReport["integritySummary"]>(
+    dbReport.integritySummary,
+    undefined
+  );
+
+  const sessionEvents = dbReport.session?.integrityEvents;
+  const integritySummary: EvaluationReport["integritySummary"] =
+    integritySummaryFromDb ||
+    (sessionEvents && sessionEvents.length > 0
+      ? {
+          incidents: dbReport.session.violationCount || 0,
+          events: sessionEvents.map((e: any) => ({
+            id: e.id,
+            sessionId: e.sessionId,
+            userId: e.userId,
+            eventType: e.eventType,
+            eventNumber: e.eventNumber,
+            policyVersion: e.policyVersion,
+            stageQuestionId: e.stageQuestionId,
+            stageQuestionIndex: e.stageQuestionIndex,
+            actionTaken: e.actionTaken,
+            serverTimestamp:
+              typeof e.serverTimestamp === "string"
+                ? e.serverTimestamp
+                : e.serverTimestamp?.toISOString() || new Date().toISOString(),
+          })),
+          policyVersion: dbReport.session.integrityPolicyVersion || "v1.0",
+          acknowledgedAt: dbReport.session.integrityPolicyAcknowledgedAt
+            ? typeof dbReport.session.integrityPolicyAcknowledgedAt === "string"
+              ? dbReport.session.integrityPolicyAcknowledgedAt
+              : dbReport.session.integrityPolicyAcknowledgedAt.toISOString()
+            : undefined,
+        }
+      : undefined);
+
+  const integrityStatus =
+    dbReport.integrityStatus ||
+    (dbReport.session?.status === "terminated_integrity"
+      ? "terminated_integrity"
+      : dbReport.session?.violationCount > 0
+      ? "warning_issued"
+      : "verified_clean");
+
   return {
     sessionId: dbReport.sessionId,
     candidateName: dbReport.candidateName,
@@ -91,6 +135,8 @@ export function mapDbReportToDomain(
     evidenceCitations,
     recruiterFollowUps,
     skillStatusCounts,
+    integrityStatus,
+    integritySummary,
   };
 }
 
@@ -131,12 +177,24 @@ export async function persistSession(
       durationSeconds: session.durationSeconds || 0,
       startedAt: session.startedAt ? new Date(session.startedAt) : new Date(),
       endedAt: session.endedAt ? new Date(session.endedAt) : null,
+      integrityPolicyAcknowledgedAt: session.integrityPolicyAcknowledgedAt
+        ? new Date(session.integrityPolicyAcknowledgedAt)
+        : null,
+      integrityPolicyVersion: session.integrityPolicyVersion || null,
+      violationCount: session.violationCount || 0,
+      terminationReason: session.terminationReason || null,
     },
     update: {
       status: session.status || "in-progress",
       durationSeconds: session.durationSeconds || 0,
       endedAt: session.endedAt ? new Date(session.endedAt) : undefined,
       userId: effectiveUserId || undefined,
+      integrityPolicyAcknowledgedAt: session.integrityPolicyAcknowledgedAt
+        ? new Date(session.integrityPolicyAcknowledgedAt)
+        : undefined,
+      integrityPolicyVersion: session.integrityPolicyVersion || undefined,
+      violationCount: session.violationCount !== undefined ? session.violationCount : undefined,
+      terminationReason: session.terminationReason || undefined,
     },
   });
 }
@@ -157,6 +215,10 @@ export async function persistAnswer(
 
     if (existingSession && existingSession.userId && userId && existingSession.userId !== userId) {
       throw new Error("Unauthorized session access");
+    }
+
+    if (existingSession && existingSession.status === "terminated_integrity") {
+      throw new Error("Cannot submit answers to a terminated interview session");
     }
 
     if (!existingSession) {
@@ -256,7 +318,14 @@ export async function persistReport(
     const durationMinutes = Math.max(1, Math.round(Number(report.durationMinutes) || (session?.durationSeconds ? session.durationSeconds / 60 : 15)));
     const durationSeconds = durationMinutes * 60;
 
-    // 1. Ensure session exists and update status to completed
+    // 1. Ensure session exists and update status to completed (or retain terminated_integrity)
+    const targetStatus =
+      existingSession?.status === "terminated_integrity" ||
+      report.verdict === "Terminated (Integrity Policy)" ||
+      report.integrityStatus === "terminated_integrity"
+        ? "terminated_integrity"
+        : "completed";
+
     if (session) {
       const skillsJson = JSON.stringify(session.setup?.skills || []);
       const effectiveUserId = userId || session.userId || existingSession?.userId || null;
@@ -274,13 +343,13 @@ export async function persistReport(
           skills: skillsJson,
           resumeFileName: session.setup?.resumeFileName || null,
           isSampleResume: Boolean(session.setup?.isSampleResume),
-          status: "completed",
+          status: targetStatus,
           durationSeconds,
           startedAt: session.startedAt ? new Date(session.startedAt) : new Date(),
           endedAt: new Date(),
         },
         update: {
-          status: "completed",
+          status: targetStatus,
           durationSeconds,
           endedAt: new Date(),
           userId: effectiveUserId || undefined,
@@ -290,7 +359,7 @@ export async function persistReport(
       await tx.interviewSession.update({
         where: { id: sessionId },
         data: {
-          status: "completed",
+          status: targetStatus,
           endedAt: new Date(),
           durationSeconds,
         },
@@ -306,7 +375,7 @@ export async function persistReport(
           interviewFocus: report.interviewFocus || "mixed",
           interviewLength: 20,
           skills: "[]",
-          status: "completed",
+          status: targetStatus,
           durationSeconds,
           startedAt: new Date(),
           endedAt: new Date(),
@@ -369,6 +438,16 @@ export async function persistReport(
     const skillStatusCountsJson = report.skillStatusCounts
       ? JSON.stringify(report.skillStatusCounts)
       : null;
+    const integritySummaryJson = report.integritySummary
+      ? JSON.stringify(report.integritySummary)
+      : null;
+    const integrityStatus =
+      report.integrityStatus ||
+      (targetStatus === "terminated_integrity"
+        ? "terminated_integrity"
+        : (existingSession?.violationCount || 0) > 0
+        ? "warning_issued"
+        : "verified_clean");
 
     // 4. Upsert EvaluationReport to guarantee idempotency and avoid duplicate key collisions
     const savedReport = await tx.evaluationReport.upsert({
@@ -391,6 +470,8 @@ export async function persistReport(
         recruiterFollowUps: recruiterFollowUpsJson,
         skillStatusCounts: skillStatusCountsJson,
         isDemoSimulation: Boolean(report.isDemoSimulation),
+        integrityStatus,
+        integritySummary: integritySummaryJson,
       },
       update: {
         candidateName: report.candidateName,
@@ -409,11 +490,16 @@ export async function persistReport(
         recruiterFollowUps: recruiterFollowUpsJson,
         skillStatusCounts: skillStatusCountsJson,
         isDemoSimulation: Boolean(report.isDemoSimulation),
+        integrityStatus,
+        integritySummary: integritySummaryJson,
       },
       include: {
         session: {
           include: {
             answers: true,
+            integrityEvents: {
+              orderBy: { createdAt: "asc" },
+            },
           },
         },
       },
@@ -439,6 +525,9 @@ export async function getReportById(
         include: {
           answers: true,
           review: true,
+          integrityEvents: {
+            orderBy: { createdAt: "asc" },
+          },
         },
       },
     },
@@ -488,6 +577,9 @@ export async function getAllPersistedReports(
         include: {
           answers: true,
           review: true,
+          integrityEvents: {
+            orderBy: { createdAt: "asc" },
+          },
         },
       },
     },
@@ -606,4 +698,229 @@ export async function getAllRecruiterReviews(): Promise<CandidateShortlistRecord
     notes: r.notes || undefined,
     reviewedBy: r.reviewedBy || undefined,
   }));
+}
+
+/**
+ * Acknowledge Interview Integrity Policy for a session
+ */
+export async function acknowledgeIntegrityPolicy(
+  sessionId: string,
+  userId?: string,
+  policyVersion = "v1.0"
+) {
+  return await prisma.$transaction(async (tx) => {
+    const existing = await tx.interviewSession.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (existing && existing.userId && userId && existing.userId !== userId) {
+      throw new Error("Unauthorized session access: cannot acknowledge policy for another candidate's session");
+    }
+
+    if (existing && existing.status === "terminated_integrity") {
+      throw new Error("Cannot acknowledge integrity policy for a terminated interview session");
+    }
+
+    const ackTime = new Date();
+
+    return await tx.interviewSession.upsert({
+      where: { id: sessionId },
+      create: {
+        id: sessionId,
+        userId: userId || null,
+        candidateName: "Candidate",
+        targetRole: "fullstack",
+        experienceLevel: "intermediate",
+        interviewFocus: "mixed",
+        skills: "[]",
+        status: "in-progress",
+        integrityPolicyAcknowledgedAt: ackTime,
+        integrityPolicyVersion: policyVersion,
+      },
+      update: {
+        integrityPolicyAcknowledgedAt: ackTime,
+        integrityPolicyVersion: policyVersion,
+      },
+    });
+  });
+}
+
+export interface RecordViolationInput {
+  sessionId: string;
+  userId?: string;
+  eventType?: string;
+  idempotencyKey?: string;
+  stageQuestionId?: string;
+  stageQuestionIndex?: number;
+  clientTimestamp?: string;
+  policyVersion?: string;
+}
+
+/**
+ * Authoritative Server State Machine for Focus-Loss Incidents
+ * Policy:
+ * - 1st Incident: Records event, issues Warning 1 of 2.
+ * - 2nd Incident: Records event, terminates session (status: 'terminated_integrity').
+ * Idempotent: repeated submissions with same idempotencyKey return existing count.
+ * Concurrency-safe: executes inside a Prisma SQLite transaction.
+ */
+export async function recordIntegrityViolation(input: RecordViolationInput) {
+  const {
+    sessionId,
+    userId,
+    eventType = "focus_loss",
+    idempotencyKey,
+    stageQuestionId,
+    stageQuestionIndex,
+    clientTimestamp,
+    policyVersion = "v1.0",
+  } = input;
+
+  return await prisma.$transaction(async (tx) => {
+    // 1. Fetch existing session
+    const session = await tx.interviewSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        integrityEvents: {
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+
+    if (!session) {
+      throw new Error("Interview session not found");
+    }
+
+    // 2. Candidate ownership verification: Never trust client-supplied ownership
+    if (session.userId && userId && session.userId !== userId) {
+      throw new Error("Unauthorized session access: cannot report integrity events for another candidate's session");
+    }
+
+    // 2b. Policy acknowledgement check: Policy must be acknowledged before recording monitoring events
+    if (!session.integrityPolicyAcknowledgedAt) {
+      const err = new Error("Integrity policy must be acknowledged before recording monitoring events");
+      (err as any).requiresPolicyAcknowledgement = true;
+      (err as any).statusCode = 400;
+      throw err;
+    }
+
+    // 3. Check if session was already normally completed: do not modify completed sessions
+    if (session.status === "completed") {
+      const err = new Error("Interview session is completed and no longer active for integrity monitoring");
+      (err as any).statusCode = 400;
+      throw err;
+    }
+
+    // 4. Idempotency Check: if idempotencyKey is already used, return recorded result
+    if (idempotencyKey) {
+      const existingEvent = await tx.interviewIntegrityEvent.findUnique({
+        where: { idempotencyKey },
+      });
+      if (existingEvent) {
+        return {
+          idempotent: true,
+          event: existingEvent,
+          violationCount: session.violationCount,
+          actionTaken: existingEvent.actionTaken,
+          status: session.status,
+          session,
+        };
+      }
+    }
+
+    // 5. Terminal State Check: If session is already terminated, reject count alteration
+    if (session.status === "terminated_integrity" || session.violationCount >= 2) {
+      const err = new Error("Interview session is already terminated by integrity policy");
+      (err as any).terminated = true;
+      (err as any).statusCode = 400;
+      throw err;
+    }
+
+    // 6. Authoritative increment
+    const nextViolationCount = session.violationCount + 1;
+    const actionTaken = nextViolationCount >= 2 ? "interview_terminated" : "warning_issued";
+    const nextStatus = nextViolationCount >= 2 ? "terminated_integrity" : session.status;
+    const terminationReason =
+      nextViolationCount >= 2
+        ? "Exceeded allowable workspace focus-loss limit (2 of 2 incidents)"
+        : session.terminationReason;
+
+    const event = await tx.interviewIntegrityEvent.create({
+      data: {
+        sessionId,
+        userId: userId || session.userId || null,
+        eventType,
+        eventNumber: nextViolationCount,
+        policyVersion,
+        stageQuestionId: stageQuestionId || null,
+        stageQuestionIndex: stageQuestionIndex !== undefined ? stageQuestionIndex : null,
+        actionTaken,
+        idempotencyKey: idempotencyKey || null,
+        clientTimestamp: clientTimestamp || null,
+        serverTimestamp: new Date(),
+      },
+    });
+
+    const updatedSession = await tx.interviewSession.update({
+      where: { id: sessionId },
+      data: {
+        violationCount: nextViolationCount,
+        status: nextStatus,
+        terminationReason,
+        endedAt: nextViolationCount >= 2 ? new Date() : undefined,
+      },
+      include: {
+        integrityEvents: {
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+
+    return {
+      idempotent: false,
+      event,
+      violationCount: nextViolationCount,
+      actionTaken,
+      status: nextStatus,
+      session: updatedSession,
+    };
+  });
+}
+
+/**
+ * Retrieve integrity audit details for a session
+ */
+export async function getIntegrityAudit(sessionId: string) {
+  const session = await prisma.interviewSession.findUnique({
+    where: { id: sessionId },
+    include: {
+      integrityEvents: {
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  });
+
+  if (!session) return null;
+
+  return {
+    sessionId: session.id,
+    userId: session.userId,
+    status: session.status,
+    violationCount: session.violationCount,
+    terminationReason: session.terminationReason,
+    policyAcknowledgedAt: session.integrityPolicyAcknowledgedAt?.toISOString() || null,
+    policyVersion: session.integrityPolicyVersion || "v1.0",
+    events: session.integrityEvents.map((e) => ({
+      id: e.id,
+      sessionId: e.sessionId,
+      userId: e.userId,
+      eventType: e.eventType,
+      eventNumber: e.eventNumber,
+      policyVersion: e.policyVersion,
+      stageQuestionId: e.stageQuestionId,
+      stageQuestionIndex: e.stageQuestionIndex,
+      actionTaken: e.actionTaken as "warning_issued" | "interview_terminated",
+      serverTimestamp: e.serverTimestamp.toISOString(),
+    })),
+  };
 }

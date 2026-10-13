@@ -75,7 +75,7 @@ export default function HomePage() {
         {/* Frictionless indicator */}
         <p className="text-xs text-slate-400 flex items-center justify-center gap-3 pt-1">
           <span className="flex items-center gap-1.5">
-            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Instant guest demo available
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Instant 1-Click Demo Accounts
           </span>
           <span>•</span>
           <span className="flex items-center gap-1.5">
@@ -459,27 +459,27 @@ export default function HomePage() {
           </h2>
 
           <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
-            Try a real-time interview right now without an account, or create an account to save your evaluations and track historical progress.
+            Test with our 1-click demo accounts or create your candidate profile to track adaptive interviews and scorecard analytics.
           </p>
         </div>
 
         {/* Dual Onboarding Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto text-left">
-          {/* Guest / Demo Flow */}
+          {/* Demo Login Flow */}
           <div className="rounded-2xl border border-slate-800/80 bg-[#080d19]/90 p-7 flex flex-col justify-between space-y-5 hover:border-indigo-500/50 transition-all shadow-md">
             <div className="space-y-2.5">
               <div className="flex items-center justify-between">
-                <Badge variant="indigo" className="px-2.5 py-0.5">Immediate Demo</Badge>
-                <span className="text-xs text-slate-400 font-mono">Zero signup</span>
+                <Badge variant="indigo" className="px-2.5 py-0.5">1-Click Demo</Badge>
+                <span className="text-xs text-slate-400 font-mono">Instant Sign In</span>
               </div>
-              <h3 className="text-lg font-bold text-white">Instant Guest Interview</h3>
+              <h3 className="text-lg font-bold text-white">Instant Demo Testing</h3>
               <p className="text-xs text-slate-300 leading-relaxed">
-                Jump directly into candidate setup. Uses local browser storage to run a complete, unrestricted interview session with live evaluation.
+                Test adaptive evaluation immediately using pre-configured Candidate or Recruiter demo credentials.
               </p>
             </div>
-            <Link href="/setup">
+            <Link href="/login?redirect=/setup">
               <Button className="w-full h-11 rounded-xl gap-2 justify-center bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 font-bold shadow-md shadow-indigo-600/20">
-                Start Guest Interview
+                Sign In with Demo Account
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
@@ -494,16 +494,16 @@ export default function HomePage() {
               </div>
               <h3 className="text-lg font-bold text-white">Candidate Account</h3>
               <p className="text-xs text-slate-300 leading-relaxed">
-                Create a password-protected candidate account to persist your reports across devices, review past feedback, and monitor progress over time.
+                Create an account or sign in to persist your scorecards across devices, review past feedback, and monitor progress.
               </p>
             </div>
             <div className="flex gap-3">
-              <Link href="/signup" className="flex-1">
+              <Link href="/signup?redirect=/setup" className="flex-1">
                 <Button className="w-full h-11 rounded-xl justify-center bg-gradient-to-r from-violet-600 to-violet-500 hover:from-violet-500 hover:to-violet-400 text-white font-bold shadow-md shadow-violet-600/20">
                   Create Account
                 </Button>
               </Link>
-              <Link href="/login" className="flex-1">
+              <Link href="/login?redirect=/setup" className="flex-1">
                 <Button variant="secondary" className="w-full h-11 rounded-xl justify-center border-slate-700/80 hover:bg-slate-800 font-semibold">
                   Sign In
                 </Button>

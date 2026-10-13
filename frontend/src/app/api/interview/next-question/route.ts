@@ -1,73 +1,168 @@
 import { NextRequest, NextResponse } from "next/server";
 import { callGemini, parseGeminiJson } from "@/lib/gemini";
-import { Question, AnswerRecord, CandidateSetup } from "@/lib/types";
+import { Question, AnswerRecord, CandidateSetup, AnswerFeedback } from "@/lib/types";
 import { resolveRequestUser } from "@/lib/resolve-user";
 import { QUESTION_BANK } from "@/lib/mock-data";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
   try {
-    void resolveRequestUser(req);
+    const auth = await resolveRequestUser(req);
     const body = await req.json();
+    const sessionId: string | undefined = body.sessionId;
     const setup: CandidateSetup = body.setup;
     const lastQuestion: Question = body.lastQuestion;
-    const lastAnswer: string = body.lastAnswer;
+    const lastAnswer: string = body.lastAnswer || "";
     const lastScore: number = body.lastScore ?? 75;
-    const answerHistory: AnswerRecord[] = body.answerHistory || [];
-    const questionsAsked: string[] = body.questionsAsked || [];
+    const lastFeedback: Partial<AnswerFeedback> | undefined = body.lastFeedback;
+    const answerHistory: AnswerRecord[] = Array.isArray(body.answerHistory) ? body.answerHistory : [];
+    const questionsAsked: string[] = Array.isArray(body.questionsAsked) ? body.questionsAsked : [];
 
-    if (!setup || !lastQuestion || !lastAnswer) {
+    // 1. Authoritative session validation & ownership check
+    if (sessionId) {
+      const session = await prisma.interviewSession.findUnique({
+        where: { id: sessionId },
+        include: { answers: true },
+      });
+      if (session) {
+        if (session.userId && auth.authenticated && auth.user && auth.user.id !== session.userId) {
+          return NextResponse.json(
+            { error: "Forbidden: Cannot request questions for another candidate's session" },
+            { status: 403 }
+          );
+        }
+        if (session.status === "terminated_integrity") {
+          return NextResponse.json(
+            { error: "Forbidden: Cannot generate questions for a terminated interview session" },
+            { status: 403 }
+          );
+        }
+        if (session.status === "completed") {
+          return NextResponse.json(
+            { error: "Forbidden: Cannot generate questions for an already completed interview session" },
+            { status: 403 }
+          );
+        }
+        // Incorporate existing answers into questionsAsked list
+        for (const ans of session.answers) {
+          if (ans.questionText && !questionsAsked.includes(ans.questionText)) {
+            questionsAsked.push(ans.questionText);
+          }
+        }
+      }
+    }
+
+    if (!setup || !lastQuestion || typeof lastAnswer !== "string") {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
+    // Include lastQuestion in questionsAsked to ensure it is never repeated
+    if (!questionsAsked.includes(lastQuestion.questionText)) {
+      questionsAsked.push(lastQuestion.questionText);
+    }
+
+    // 2. Build performance context
+    const recentHistory = answerHistory.slice(-3);
     const historyContext =
-      answerHistory.length > 0
-        ? `\n\nRecent Performance:\n${answerHistory.slice(-3).map((a) => `- ${a.category}: Score ${a.feedback.score}%`).join("\n")}`
+      recentHistory.length > 0
+        ? `\nRecent Turn History:\n${recentHistory
+            .map(
+              (a) =>
+                `- ${a.category}: Score ${a.feedback.score}%. Strengths: [${(a.feedback.strengths || []).join(", ")}]. Gaps: [${(a.feedback.gaps || []).join(", ")}]`
+            )
+            .join("\n")}`
         : "";
 
     const previousQList =
       questionsAsked.length > 0
-        ? `\n\nAlready asked (DO NOT repeat):\n${questionsAsked.map((q, i) => `${i + 1}. ${q}`).join("\n")}`
+        ? `\n\nQuestions Already Asked in This Session (DO NOT REPEAT OR CLOSELY DUPLICATE ANY OF THESE):\n${questionsAsked
+            .map((q, i) => `${i + 1}. ${q}`)
+            .join("\n")}`
         : "";
 
-    const prompt = `You are an adaptive technical interviewer. Generate the next question based on candidate performance.
+    const missingGaps = lastFeedback?.missingConcepts?.length
+      ? `Identified Gaps/Missing Concepts: ${lastFeedback.missingConcepts.join(", ")}`
+      : lastFeedback?.gaps?.length
+      ? `Gaps Noted: ${lastFeedback.gaps.join(", ")}`
+      : "";
 
-Role: ${setup.targetRole} | Level: ${setup.experienceLevel} | Focus: ${setup.interviewFocus}${historyContext}
+    // 3. Prompt Construction with Adaptive Strategy
+    const prompt = `You are an expert adaptive technical interviewer conducting an ongoing interview.
+Role: ${setup.targetRole} | Seniority: ${setup.experienceLevel} | Track: ${setup.interviewFocus}
+${historyContext}
 
-Last Question: "${lastQuestion.questionText}"
-Last Answer: "${lastAnswer.slice(0, 500)}"
-Score: ${lastScore}/100
+Previous Question: "${lastQuestion.questionText}"
+Previous Category: ${lastQuestion.category}
+Candidate Answer: "${lastAnswer.slice(0, 1000)}"
+Evaluated Score: ${lastScore}/100
+${missingGaps}
 
-Strategy:
-- Score >= 85: harder/deeper topic
-- Score 65-84: follow up on gaps
-- Score < 65: simpler foundational concept${previousQList}
+ADAPTIVE BRANCHING STRATEGY:
+1. If Score >= 80: The candidate demonstrated competence on the core topic. Advance difficulty into edge cases, performance bottlenecks, high concurrency, or distributed architectural trade-offs.
+2. If Score 50 - 79: The candidate showed partial understanding but missed key concepts. Generate a focused, probing follow-up targeting the specific missing concept or operational trade-off (e.g. if hash tables were explained but collisions missed, probe collision handling).
+3. If Score < 50: The candidate struggled with this topic. Pivot to fundamental conceptual mechanics of this domain without shaming or excessive trivia.
+4. DO NOT repeat, rephrase, or duplicate any previously asked question.
+5. DO NOT provide the solution, hint heavily, or make the question leading.
 
-Respond ONLY with valid JSON (no markdown, no code fences):
+Respond ONLY with valid JSON (no markdown fences, no surrounding text):
 {
   "id": "ai-q-${Date.now()}",
   "role": "${setup.targetRole}",
-  "category": "<topic>",
-  "difficulty": "<beginner|intermediate|advanced>",
-  "questionText": "<the adaptive question>",
-  "context": "<brief context or null>",
-  "hint": "<subtle hint>",
-  "expectedKeywords": ["<kw1>", "<kw2>", "<kw3>"]
-}`;
+  "category": "<target category>",
+  "difficulty": "${lastScore >= 80 ? "advanced" : lastScore < 50 ? "beginner" : "intermediate"}",
+  "questionText": "<the adaptive follow-up question>",
+  "context": "<1-2 sentence real-world engineering scenario>",
+  "hint": "<subtle guiding hint>",
+  "expectedKeywords": ["<concept1>", "<concept2>", "<concept3>"]
+}
+${previousQList}`;
 
     try {
-      console.log(`[🤖 Gemini AI] Generating adaptive follow-up (previous score: ${lastScore}/100)...`);
+      console.log(
+        `[🤖 Gemini AI] Generating adaptive follow-up (previous score: ${lastScore}/100 on ${lastQuestion.category})...`
+      );
       const raw = await callGemini(prompt);
       const question = parseGeminiJson<Question>(raw);
+
+      // Validate structure
+      if (
+        !question ||
+        typeof question.questionText !== "string" ||
+        question.questionText.trim().length < 15 ||
+        !Array.isArray(question.expectedKeywords)
+      ) {
+        throw new Error("AI returned incomplete or malformed adaptive question");
+      }
+
+      // Check deduplication against questionsAsked
+      const isDuplicate = questionsAsked.some(
+        (asked) =>
+          asked.toLowerCase().trim() === question.questionText.toLowerCase().trim() ||
+          (asked.length > 30 && question.questionText.toLowerCase().includes(asked.toLowerCase().slice(0, 30)))
+      );
+
+      if (isDuplicate) {
+        console.warn("[🤖 Gemini AI] Model suggested previously asked question; falling back to bank.");
+        throw new Error("Model generated duplicate question");
+      }
+
       console.log(`[🤖 Gemini AI] Adaptive question ready: "${question.questionText.slice(0, 90)}..."`);
-      return NextResponse.json({ question });
+      return NextResponse.json({ question, fallbackUsed: false });
     } catch (aiErr) {
-      console.warn("[🤖 Gemini AI] Adaptive question AI call failed (quota/rate-limit/network). Using calibrated fallback question:", aiErr);
+      console.warn(
+        "[🤖 Gemini AI] Adaptive question AI call failed (quota/rate-limit/network/duplicate). Using calibrated fallback question:",
+        aiErr
+      );
       const roleBank = QUESTION_BANK[setup.targetRole] || QUESTION_BANK.fullstack;
-      const unusedQuestion = roleBank.find((q) => !questionsAsked.includes(q.questionText) && q.id !== lastQuestion.id) || roleBank[0];
+      const unusedQuestion =
+        roleBank.find(
+          (q) => !questionsAsked.includes(q.questionText) && q.id !== lastQuestion.id
+        ) || roleBank[0];
+
       const fallbackQuestion: Question = {
         ...unusedQuestion,
         id: `fb-q-${Date.now()}`,
-        difficulty: lastScore >= 85 ? "advanced" : lastScore < 65 ? "beginner" : "intermediate",
+        difficulty: lastScore >= 80 ? "advanced" : lastScore < 50 ? "beginner" : "intermediate",
       };
       return NextResponse.json({ question: fallbackQuestion, fallbackUsed: true });
     }

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Sparkles, ArrowRight, Lock, Mail, User, AlertCircle, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,8 +10,11 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
 
-export default function SignupPage() {
+function SignupFormContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectParam = searchParams.get("redirect") || "/dashboard";
+
   const { user, refreshUser } = useAuth();
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
@@ -20,12 +23,12 @@ export default function SignupPage() {
   const [error, setError] = React.useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
-  // If already logged in, redirect to dashboard
+  // If already logged in, redirect
   React.useEffect(() => {
     if (user) {
-      router.push("/dashboard");
+      router.push(redirectParam);
     }
-  }, [user, router]);
+  }, [user, redirectParam, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,7 +82,7 @@ export default function SignupPage() {
       }
 
       await refreshUser();
-      router.push("/dashboard");
+      router.push(redirectParam);
     } catch (err) {
       console.error("Signup submission error:", err);
       setError("An unexpected network error occurred. Please try again.");
@@ -110,13 +113,13 @@ export default function SignupPage() {
             Get Started with InterviewIQ
           </h1>
           <p className="text-xs sm:text-sm text-slate-400">
-            Save evaluations across sessions, build an interview portfolio, and track skill growth.
+            Register to take adaptive technical interviews, save scorecards, and track progress.
           </p>
         </div>
 
-        {/* Card Form */}
+        {/* Form Card */}
         <Card className="rounded-2xl border border-slate-800/80 bg-[#0c1427]/95 shadow-xl p-6 sm:p-7">
-          <CardContent className="p-0 space-y-4">
+          <CardContent className="p-0 space-y-5">
             {error && (
               <div className="rounded-xl border border-rose-800/70 bg-rose-950/30 p-3.5 text-xs text-rose-300 flex items-start gap-2.5">
                 <AlertCircle className="h-4 w-4 shrink-0 text-rose-400 mt-0.5" />
@@ -133,11 +136,11 @@ export default function SignupPage() {
                   <Input
                     id="name"
                     type="text"
-                    placeholder="Alex Chen"
+                    placeholder="Alex Rivera"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     required
-                    autoComplete="name"
+                    autoFocus
                     className="pl-9 h-11 rounded-xl border-slate-700/80 bg-[#080d19] text-xs sm:text-sm"
                   />
                   <User className="absolute left-3 top-3.5 h-4 w-4 text-slate-500 pointer-events-none" />
@@ -152,7 +155,7 @@ export default function SignupPage() {
                   <Input
                     id="email"
                     type="email"
-                    placeholder="alex.chen@example.com"
+                    placeholder="alex@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -171,7 +174,7 @@ export default function SignupPage() {
                   <Input
                     id="password"
                     type="password"
-                    placeholder="At least 8 characters"
+                    placeholder="Min. 8 characters (letters + numbers)"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
@@ -180,7 +183,6 @@ export default function SignupPage() {
                   />
                   <Lock className="absolute left-3 top-3.5 h-4 w-4 text-slate-500 pointer-events-none" />
                 </div>
-                <p className="text-[11px] text-slate-400">Must include both letters and numbers</p>
               </div>
 
               <div className="space-y-1.5">
@@ -191,7 +193,7 @@ export default function SignupPage() {
                   <Input
                     id="confirmPassword"
                     type="password"
-                    placeholder="Re-enter your password"
+                    placeholder="Re-enter password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
@@ -204,37 +206,24 @@ export default function SignupPage() {
 
               <Button
                 type="submit"
-                className="w-full h-11 rounded-xl gap-2 justify-center bg-gradient-to-r from-violet-600 to-violet-500 hover:from-violet-500 hover:to-violet-400 text-white font-bold shadow-md shadow-violet-600/25 mt-3"
+                className="w-full h-11 rounded-xl gap-2 justify-center bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold shadow-md shadow-violet-600/25 mt-2"
                 isLoading={isSubmitting}
+                disabled={isSubmitting}
               >
-                Create Account
+                Create Account & Continue
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </form>
-
-            {/* Alternative: Guest Demo Flow */}
-            <div className="pt-4 border-t border-slate-800/80 space-y-3">
-              <div className="text-center">
-                <span className="text-xs text-slate-400">
-                  Just exploring the demo?
-                </span>
-              </div>
-              <Link href="/setup" className="block">
-                <Button
-                  variant="secondary"
-                  className="w-full h-10 rounded-xl justify-center text-xs border-slate-700/80 hover:bg-slate-800 font-semibold"
-                >
-                  Start Guest Interview Directly
-                </Button>
-              </Link>
-            </div>
           </CardContent>
         </Card>
 
         {/* Bottom Switcher */}
         <div className="text-center text-xs text-slate-400">
           Already have an account?{" "}
-          <Link href="/login" className="text-violet-400 hover:text-violet-300 font-semibold underline underline-offset-4">
+          <Link
+            href={redirectParam && redirectParam !== "/dashboard" ? `/login?redirect=${encodeURIComponent(redirectParam)}` : "/login"}
+            className="text-violet-400 hover:text-violet-300 font-semibold underline underline-offset-4"
+          >
             Sign In Here
           </Link>
         </div>
@@ -245,9 +234,26 @@ export default function SignupPage() {
             <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
             <span>Candidate Data Privacy Assurances</span>
           </div>
-          <p className="text-[11px] leading-relaxed">Passwords are never stored in plaintext. Sessions use secure HTTP-only cookies. No personal resumes are retained without explicit candidate consent.</p>
+          <p className="text-[11px] leading-relaxed">
+            Passwords are encrypted using secure PBKDF2 hashing. Sessions use secure HTTP-only cookies. No personal resumes are retained without explicit candidate consent.
+          </p>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="flex flex-col items-center justify-center min-h-[calc(100vh-14rem)] py-8 px-4 text-slate-400">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-violet-400 border-t-transparent mb-3" />
+          <p className="text-xs">Loading registration form...</p>
+        </div>
+      }
+    >
+      <SignupFormContent />
+    </React.Suspense>
   );
 }

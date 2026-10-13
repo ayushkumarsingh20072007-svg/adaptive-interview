@@ -38,4 +38,5 @@ frontend/data/
 *.db
 *.db-journal
 *.db-wal
+*.db.bak
 dev.db
