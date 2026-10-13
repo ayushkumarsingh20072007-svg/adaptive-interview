@@ -11,8 +11,18 @@ export async function POST(request: Request) {
       candidate: "usr_demo_alex",
       "usr_demo_recruiter": "usr_demo_recruiter",
       "usr_demo_alex": "usr_demo_alex",
+      "usr_demo_maya": "usr_demo_maya",
+      "usr_demo_liam": "usr_demo_liam",
+      "usr_demo_priya": "usr_demo_priya",
+      "usr_demo_marcus": "usr_demo_marcus",
+      "usr_demo_rohan": "usr_demo_rohan",
       "recruiter@interviewiq.ai": "usr_demo_recruiter",
       "alex.rivera@example.com": "usr_demo_alex",
+      "maya.patel@example.com": "usr_demo_maya",
+      "liam.chen@example.com": "usr_demo_liam",
+      "priya.sharma@example.com": "usr_demo_priya",
+      "marcus.chen@example.com": "usr_demo_marcus",
+      "rohan.gupta@example.com": "usr_demo_rohan",
     };
 
     let targetId: string | undefined;

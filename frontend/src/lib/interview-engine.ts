@@ -436,7 +436,7 @@ export function generateEvaluationReport(session: InterviewSession): EvaluationR
     actionableRoadmap,
     answerRecords: answers,
     isDemoSimulation: true,
-    userId: session.setup.userId || session.userId,
+    userId: session.setup?.userId || session.userId,
     evidenceCitations,
     recruiterFollowUps,
     skillStatusCounts,

@@ -2,9 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { callGemini, parseGeminiJson } from "@/lib/gemini";
 import { InterviewSession, EvaluationReport, SkillMetric, SkillStatusCategory } from "@/lib/types";
 import { resolveRequestUser } from "@/lib/resolve-user";
-import { persistReport } from "@/lib/report-persistence";
+import { persistReport, mapDbReportToDomain } from "@/lib/report-persistence";
 import { generateEvaluationReport } from "@/lib/interview-engine";
 import { prisma } from "@/lib/prisma";
+
+function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
 
 export async function POST(req: NextRequest) {
   let session: InterviewSession | undefined;
@@ -15,6 +24,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     session = body.session;
     const forceDeterministic = Boolean(body.forceDeterministic);
+    const forceRegenerate = Boolean(body.forceRegenerate);
 
     if (!session || !session.id) {
       return NextResponse.json({ error: "Missing session data" }, { status: 400 });
@@ -23,34 +33,119 @@ export async function POST(req: NextRequest) {
     // Never trust client-supplied userId: only authenticate via server session cookie
     effectiveUserId = auth.authenticated && auth.user ? auth.user.id : undefined;
 
-    // Check if session exists in DB and belongs to a different candidate
+    // 1. Fetch authoritative session record from SQLite first
     const existingDbSession = await prisma.interviewSession.findUnique({
       where: { id: session.id },
       include: {
+        answers: true,
         integrityEvents: { orderBy: { createdAt: "asc" } },
       },
     });
 
-    if (existingDbSession && existingDbSession.userId) {
-      if (!auth.authenticated || !auth.user || auth.user.id !== existingDbSession.userId) {
+    // Enforce authorization for private candidate sessions
+    if (existingDbSession && existingDbSession.userId && existingDbSession.userId !== "guest") {
+      const isAuthorized =
+        auth.authenticated &&
+        auth.user &&
+        (auth.user.role === "recruiter" || auth.user.id === existingDbSession.userId);
+
+      if (!isAuthorized) {
         return NextResponse.json(
-          { error: "Forbidden: You cannot generate or overwrite a report for another candidate's session." },
+          { error: "Forbidden: You cannot access, generate, or regenerate a report for another candidate's session." },
           { status: 403 }
         );
       }
+    }
+
+    // 2. Idempotency Policy: Check if a report already exists for this session
+    const existingReport = await prisma.evaluationReport.findUnique({
+      where: { sessionId: session.id },
+      include: {
+        session: {
+          include: {
+            answers: true,
+            review: true,
+            integrityEvents: { orderBy: { createdAt: "asc" } },
+          },
+        },
+      },
+    });
+
+    if (existingReport && !forceRegenerate) {
+      // Safely return existing report without duplicate AI calls or overwrites
+      const domainReport = mapDbReportToDomain(
+        existingReport,
+        existingReport.session?.answers,
+        { isRecruiter: auth.user?.role === "recruiter" }
+      );
+      return NextResponse.json({ report: domainReport, existing: true });
+    }
+
+    // 3. Interview completion / termination requirement for report generation / forceRegenerate
+    const currentSessionStatus = existingDbSession?.status || session.status;
+    if (currentSessionStatus !== "completed" && currentSessionStatus !== "terminated_integrity") {
+      return NextResponse.json(
+        { error: "Cannot generate evaluation report: Interview session must be completed or terminated before generating a report." },
+        { status: 400 }
+      );
     }
 
     const isTerminated =
       existingDbSession?.status === "terminated_integrity" ||
       session.status === "terminated_integrity";
 
-    const answers = session.answers || [];
+    // 3. Reconcile answers with server-persisted answers as authoritative source of truth
+    const persistedDbAnswers: AnswerRecord[] = (existingDbSession?.answers || []).map((ans) => ({
+      questionId: ans.questionId,
+      questionText: ans.questionText,
+      category: ans.category,
+      difficulty: ans.difficulty,
+      answerText: ans.answerText,
+      submittedAt: ans.submittedAt,
+      feedback: {
+        score: ans.score,
+        strengths: safeJsonParse<string[]>(ans.strengths, []),
+        gaps: safeJsonParse<string[]>(ans.gaps, []),
+        adaptiveNote: ans.adaptiveNote || "",
+      },
+    }));
+
+    const answersMap = new Map<string, AnswerRecord>();
+    persistedDbAnswers.forEach((a) => answersMap.set(a.questionId, a));
+    (session.answers || []).forEach((a) => {
+      if (!answersMap.has(a.questionId)) {
+        answersMap.set(a.questionId, a);
+      }
+    });
+
+    const answers = Array.from(answersMap.values());
     const totalAnswers = answers.length;
 
-    // If deterministic mode forced or no answers recorded, use deterministic generator directly
-    if (forceDeterministic || totalAnswers === 0) {
-      const report = generateEvaluationReport(session);
-      report.userId = effectiveUserId;
+    // 4. Zero Eligible Answers Protection: Never fabricate reports from zero answers
+    if (totalAnswers === 0) {
+      return NextResponse.json(
+        { error: "Cannot generate evaluation report: No eligible answers recorded for this interview session." },
+        { status: 400 }
+      );
+    }
+
+    const effectiveSetup: any = session.setup || {
+      candidateName: existingDbSession?.candidateName || "Candidate",
+      targetRole: existingDbSession?.targetRole || "fullstack",
+      experienceLevel: existingDbSession?.experienceLevel || "intermediate",
+      interviewFocus: existingDbSession?.interviewFocus || "mixed",
+      interviewLength: existingDbSession?.interviewLength || 20,
+      skills: safeJsonParse<string[]>(existingDbSession?.skills, []),
+      resumeFileName: existingDbSession?.resumeFileName || undefined,
+      isSampleResume: Boolean(existingDbSession?.isSampleResume),
+      userId: existingDbSession?.userId || effectiveUserId,
+    };
+    const targetSession: InterviewSession = { ...session, setup: effectiveSetup, answers };
+
+    // If deterministic mode forced, use deterministic generator directly
+    if (forceDeterministic) {
+      const report = generateEvaluationReport(targetSession);
+      report.userId = effectiveUserId || effectiveSetup.userId;
       if (auth.user?.name) {
         report.candidateName = auth.user.name;
       }
@@ -59,7 +154,7 @@ export async function POST(req: NextRequest) {
         report.integrityStatus = "terminated_integrity";
       }
       report.isDemoSimulation = true;
-      const savedReport = await persistReport(report, session, effectiveUserId);
+      const savedReport = await persistReport(report, targetSession, effectiveUserId || effectiveSetup.userId);
       return NextResponse.json({ report: savedReport });
     }
 
@@ -155,12 +250,11 @@ Respond ONLY with valid JSON (no markdown formatting, no code fences):
       aiReport = parseGeminiJson<any>(raw);
       console.log(`[🤖 Gemini AI] Day 2 Report synthesis received from Gemini.`);
     } catch (aiErr) {
-      console.warn("[🤖 Gemini AI] AI call failed or timed out. Falling back to deterministic rubric:", aiErr);
-      const fallback = generateEvaluationReport(session);
-      fallback.userId = effectiveUserId;
-      fallback.isDemoSimulation = true;
-      const savedFallback = await persistReport(fallback, session, effectiveUserId);
-      return NextResponse.json({ report: savedFallback });
+      console.warn("[🤖 Gemini AI] AI call failed or timed out:", aiErr);
+      return NextResponse.json(
+        { error: "AI evaluation service failed to generate report. Please try again or submit with deterministic evaluation." },
+        { status: 502 }
+      );
     }
 
     const validVerdicts = [
@@ -317,28 +411,17 @@ Respond ONLY with valid JSON (no markdown formatting, no code fences):
     };
 
     // Persist completed report to SQLite with idempotency
-    const savedDomainReport = await persistReport(report, session, effectiveUserId);
+    const targetSessionToPersist: InterviewSession = { ...session, answers };
+    const savedDomainReport = await persistReport(report, targetSessionToPersist, effectiveUserId);
     return NextResponse.json({ report: savedDomainReport });
   } catch (err: any) {
     if (err?.message?.includes("Forbidden") || err?.message?.includes("Cannot save report to another candidate")) {
       return NextResponse.json({ error: err.message }, { status: 403 });
     }
-    console.error("[generate-report] Unexpected error, trying deterministic fallback:", err);
-
-    if (session) {
-      try {
-        const fallback = generateEvaluationReport(session);
-        fallback.userId = effectiveUserId;
-        fallback.isDemoSimulation = true;
-        const savedFallback = await persistReport(fallback, session, effectiveUserId);
-        return NextResponse.json({ report: savedFallback });
-      } catch (fallbackErr) {
-        console.error("[generate-report] Fatal persistence fallback error:", fallbackErr);
-      }
-    }
+    console.error("[generate-report] Unexpected error in report generation:", err);
 
     return NextResponse.json(
-      { error: "Failed to generate and persist interview report." },
+      { error: err?.message || "Failed to generate and persist interview report." },
       { status: 500 }
     );
   }

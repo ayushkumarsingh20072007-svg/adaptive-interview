@@ -17,11 +17,12 @@ Copy `.env.example` to `.env.local`:
 ```bash
 cp .env.example .env.local
 ```
-Optionally specify backend API URL (defaults to Next.js routes or local backend):
+Configure required environment variables:
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:5000
 GEMINI_API_KEY=your_gemini_api_key_here
+DATABASE_URL="file:./dev.db"
 ```
+*(Note: Application API requests resolve directly via Next.js App Router routes at `/api/*`).*
 
 ### 3. Start Development Server
 ```bash

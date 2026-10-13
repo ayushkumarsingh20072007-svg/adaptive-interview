@@ -1,102 +1,94 @@
-# Adaptive InterviewIQ — Monorepo (Frontend & Backend)
+# Adaptive InterviewIQ — Architecture & Quick Start Guide
 
-Welcome to the **Adaptive InterviewIQ** repository! The codebase is cleanly separated into dedicated **`frontend/`** and **`backend/`** directories so all 5 team members can collaborate without code collisions or merge conflicts.
+InterviewIQ is an adaptive AI technical interviewing platform featuring dynamic question generation, live voice and code evaluation, integrity & proctoring monitoring, and evidence-backed candidate scorecards for recruiters.
+
+---
+
+## 🏛️ System Architecture
+
+The project has established **Next.js App Router (Port 3000) + Prisma (SQLite)** as its **canonical production architecture**:
 
 ```
 adaptive-interview/
-├── frontend/             # 🎨 Frontend Web App (Next.js 16, React, Tailwind CSS)
+├── frontend/             # 🚀 CANONICAL FULL-STACK APPLICATION (Port 3000)
 │   ├── src/
-│   │   ├── app/          # Pages (Landing, Setup, Dashboard, Interview, Report, Auth)
-│   │   ├── components/   # UI & Workspace components
-│   │   └── lib/          # Client state, storage & API client
-│   ├── public/           # Static assets & icons
-│   ├── .env.example      # Frontend environment template
+│   │   ├── app/          # Pages & Server API Routes (Next.js 16 App Router)
+│   │   │   ├── api/auth/          # Canonical Authentication (PBKDF2-SHA512 + SQLite)
+│   │   │   ├── api/interview/     # Canonical Interview & Adaptive Engine
+│   │   │   └── api/ai-assistant/  # AI Coach Endpoint
+│   │   ├── components/   # Interactive Workspace, Voice & Proctoring UI
+│   │   └── lib/          # Prisma client, Gemini client, & persistence services
+│   ├── prisma/           # Canonical SQLite Database Schema (schema.prisma)
 │   └── package.json
 │
-├── backend/              # ⚙️ Backend API Service (Express, TypeScript, Gemini AI)
+├── backend/              # 📦 PARALLEL / LEGACY SERVICE (Port 5000)
+│   │                     # Note: Preserved for modular backend reference;
+│   │                     # actual frontend application traffic is served directly
+│   │                     # by the Next.js API routes above.
 │   ├── src/
-│   │   ├── routes/       # Auth & Interview endpoints
-│   │   ├── services/     # Gemini AI client & PBKDF2 auth service
-│   │   ├── types/        # TypeScript data contracts
+│   │   ├── routes/       # Express route handlers
+│   │   ├── services/     # Flat-file JSON auth & Gemini service
 │   │   └── server.ts     # Express server entry point
-│   ├── .env.example      # Backend environment template
 │   └── package.json
 │
-├── package.json          # Root workspace scripts
-└── README.md             # This guide
+├── package.json          # Root monorepo workspace scripts
+└── README.md             # This architecture documentation
 ```
+
+### Why Next.js App Router + Prisma SQLite is Canonical
+1. **Single Source of Truth:** All user accounts, active interview sessions, answer evaluations, integrity events, and recruiter reviews are stored in Prisma SQLite (`frontend/prisma/dev.db`).
+2. **Unified Route Protection:** Server-side route guarding and HTTP-only cookie validation are enforced via Next.js proxy middleware (`frontend/src/proxy.ts`).
+3. **Direct Server-Side Gemini Integration:** All Gemini AI calls are handled securely server-side inside Next.js API routes without exposing API keys to the browser.
+4. **Current Status of `backend/`:** The Express backend (`backend/src/server.ts`, port 5000) is maintained as a parallel standalone implementation for decoupled microservice reference. It is **not** deleted and remains runnable via `npm run dev:backend`.
 
 ---
 
-## 👥 Team Workflows
+## ⚡ Quick Start (Canonical Application)
 
-### 🎨 1. Frontend Team (Next.js & UI)
-If you are developing the user interface, interview simulation workspace, or scorecards:
+### 1. Install Dependencies
+From the repository root:
 ```bash
-# Navigate to frontend folder
-cd frontend
-
-# Install dependencies
-npm install
-
-# Setup environment
-cp .env.example .env.local
-
-# Run frontend dev server (runs on http://localhost:3000)
-npm run dev
+npm run install:all
 ```
+*(Or navigate to `frontend/` and run `npm install`).*
 
-### ⚙️ 2. Backend Team (APIs, Auth & Gemini AI)
-If you are working on the Gemini AI prompts, interview engine, evaluation rubrics, or authentication:
+### 2. Configure Environment
+Set up the frontend environment (`frontend/.env.local`):
 ```bash
-# Navigate to backend folder
-cd backend
-
-# Install dependencies
-npm install
-
-# Setup environment
-cp .env.example .env
-
-# Run backend API server (runs on http://localhost:5000)
-npm run dev
+# In frontend/.env.local:
+GEMINI_API_KEY=your_gemini_api_key_here
+DATABASE_URL="file:./dev.db"
 ```
+*(Get a Google Gemini API key at [Google AI Studio](https://aistudio.google.com/app/apikey)).*
+
+### 3. Start Application
+```bash
+# Starts canonical Next.js application on http://localhost:3000
+npm run dev
+# or
+npm run dev:frontend
+```
+Open **[http://localhost:3000](http://localhost:3000)** in your browser.
 
 ---
 
-## ⚡ Root Quick Commands
+## 🛠️ Monorepo Workspace Commands
 
-From the project root, you can also run convenient workspace commands:
-
-| Command | Action |
-| :--- | :--- |
-| `npm run dev:frontend` | Starts the Next.js frontend on `http://localhost:3000` |
-| `npm run dev:backend` | Starts the Express backend API on `http://localhost:5000` |
-| `npm run build:frontend` | Builds production bundle for frontend |
-| `npm run build:backend` | Compiles backend TypeScript to `/dist` |
-
----
-
-## 🔑 Environment Setup for Team
-
-1. **Backend (`backend/.env`)**:
-   ```env
-   PORT=5000
-   FRONTEND_URL=http://localhost:3000
-   GEMINI_API_KEY=your_gemini_api_key_here
-   ```
-2. **Frontend (`frontend/.env.local`)**:
-   ```env
-   NEXT_PUBLIC_API_URL=http://localhost:5000
-   GEMINI_API_KEY=your_gemini_api_key_here
-   ```
-*(Get your free Google Gemini API key at [Google AI Studio](https://aistudio.google.com/app/apikey)).*
+| Command | Target | Description |
+| :--- | :--- | :--- |
+| `npm run dev` | Frontend (`:3000`) | Launches the canonical Next.js fullstack application |
+| `npm run dev:frontend` | Frontend (`:3000`) | Explicit command to run the canonical Next.js app |
+| `npm run dev:backend` | Backend (`:5000`) | Runs the parallel Express API service (legacy/reference) |
+| `npm run build:frontend` | Frontend | Builds the production Next.js bundle |
+| `npm run build:backend` | Backend | Compiles the Express TypeScript service to `dist/` |
 
 ---
 
-## 🧪 Demo Test Credentials
+## 🧪 Built-in Demo Test Credentials
 
 | Role | Email | Password |
 | :--- | :--- | :--- |
 | **Recruiter** | `recruiter@interviewiq.ai` | `Password123` |
-| **Candidate** | `candidate@interviewiq.ai` | `Password123` |
+| **Candidate** | `alex.rivera@example.com` | `Password123` |
+| **Candidate (Backend)** | `liam.chen@example.com` | `Password123` |
+| **Candidate (Frontend)** | `maya.patel@example.com` | `Password123` |

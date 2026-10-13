@@ -293,6 +293,39 @@ async function runStage56Audit() {
       include: { answers: true },
     });
 
+    // Mark session as 'completed' before report generation
+    // (Security guard added in Stage 2B.1 requires this)
+    const completeSessionRes = await fetch(`${BASE_URL}/api/interview/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookieAlex },
+      body: JSON.stringify({
+        session: {
+          id: testSessionId,
+          setup: {
+            candidateName: candidateAlex.name,
+            targetRole: "fullstack",
+            experienceLevel: "senior",
+            interviewFocus: "mixed",
+            interviewLength: 20,
+            skills: ["React", "TypeScript", "Node.js", "Redis", "PostgreSQL"],
+            userId: candidateAlex.id,
+          },
+          status: "completed",
+          startedAt: new Date(Date.now() - 1200000).toISOString(),
+          endedAt: new Date().toISOString(),
+          durationSeconds: 1200,
+          answers: [],
+          currentQuestionIndex: 2,
+          userId: candidateAlex.id,
+        },
+      }),
+    });
+
+    if (!completeSessionRes.ok) {
+      const errData = await completeSessionRes.json();
+      throw new Error(`Failed to complete session: ${JSON.stringify(errData)}`);
+    }
+
     const reportRes = await fetch(`${BASE_URL}/api/interview/generate-report`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: cookieAlex },

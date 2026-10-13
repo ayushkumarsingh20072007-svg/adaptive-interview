@@ -44,10 +44,11 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths EXCEPT static files, image optimisation,
-     * and Next.js internals so CSS/JS/images are never blocked.
-     */
-    "/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)",
+    "/dashboard/:path*",
+    "/interview/:path*",
+    "/setup/:path*",
+    "/report/:path*",
+    "/login",
+    "/signup",
   ],
 };

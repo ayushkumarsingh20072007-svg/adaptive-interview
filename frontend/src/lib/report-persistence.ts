@@ -13,7 +13,7 @@ import {
 /**
  * Safely parse JSON string with fallback
  */
-function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
+export function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
   if (!raw) return fallback;
   try {
     return JSON.parse(raw) as T;
@@ -153,12 +153,24 @@ export async function persistSession(
     where: { id: session.id },
   });
 
-  // Never allow a candidate to overwrite another candidate's private session
-  if (existing && existing.userId && userId && existing.userId !== userId) {
-    throw new Error("Cannot overwrite another candidate's private session");
+  // Never allow an unauthorized or unauthenticated caller to overwrite another candidate's private session
+  if (existing && existing.userId && existing.userId !== "guest") {
+    if (!userId || existing.userId !== userId) {
+      throw new Error("Cannot overwrite another candidate's private session");
+    }
   }
 
-  const effectiveUserId = userId || session.userId || existing?.userId || null;
+  const effectiveUserId = userId || existing?.userId || null;
+
+  // Prevent reviving or reverting completed or terminated sessions
+  const isTerminalExisting =
+    existing?.status === "completed" || existing?.status === "terminated_integrity";
+  const updatedStatus = isTerminalExisting ? existing.status : (session.status || "in-progress");
+
+  const isCompleted = updatedStatus === "completed" || session.status === "completed";
+  const finalEndedAt = isCompleted
+    ? (session.endedAt ? new Date(session.endedAt) : (existing?.endedAt || new Date()))
+    : (session.endedAt ? new Date(session.endedAt) : null);
 
   return await prisma.interviewSession.upsert({
     where: { id: session.id },
@@ -176,7 +188,7 @@ export async function persistSession(
       status: session.status || "in-progress",
       durationSeconds: session.durationSeconds || 0,
       startedAt: session.startedAt ? new Date(session.startedAt) : new Date(),
-      endedAt: session.endedAt ? new Date(session.endedAt) : null,
+      endedAt: finalEndedAt,
       integrityPolicyAcknowledgedAt: session.integrityPolicyAcknowledgedAt
         ? new Date(session.integrityPolicyAcknowledgedAt)
         : null,
@@ -185,9 +197,9 @@ export async function persistSession(
       terminationReason: session.terminationReason || null,
     },
     update: {
-      status: session.status || "in-progress",
-      durationSeconds: session.durationSeconds || 0,
-      endedAt: session.endedAt ? new Date(session.endedAt) : undefined,
+      status: updatedStatus,
+      durationSeconds: isTerminalExisting ? (existing?.durationSeconds || session.durationSeconds || 0) : (session.durationSeconds || 0),
+      endedAt: isCompleted ? finalEndedAt : (session.endedAt ? new Date(session.endedAt) : undefined),
       userId: effectiveUserId || undefined,
       integrityPolicyAcknowledgedAt: session.integrityPolicyAcknowledgedAt
         ? new Date(session.integrityPolicyAcknowledgedAt)
@@ -213,12 +225,18 @@ export async function persistAnswer(
       where: { id: sessionId },
     });
 
-    if (existingSession && existingSession.userId && userId && existingSession.userId !== userId) {
-      throw new Error("Unauthorized session access");
+    if (existingSession && existingSession.userId && existingSession.userId !== "guest") {
+      if (!userId || existingSession.userId !== userId) {
+        throw new Error("Unauthorized session access");
+      }
     }
 
     if (existingSession && existingSession.status === "terminated_integrity") {
       throw new Error("Cannot submit answers to a terminated interview session");
+    }
+
+    if (existingSession && existingSession.status === "completed") {
+      throw new Error("Cannot submit answers to an already completed interview session");
     }
 
     if (!existingSession) {
@@ -242,21 +260,31 @@ export async function persistAnswer(
       });
     }
 
-    // 2. Deduplicate: check if an answer for this questionId already exists in this session
-    const existingAnswer = await tx.interviewAnswer.findFirst({
+    // 2. Deduplicate: check if answers for this questionId already exist in this session
+    const existingAnswers = await tx.interviewAnswer.findMany({
       where: {
         sessionId,
         questionId: answer.questionId,
       },
+      orderBy: { id: "asc" },
     });
 
     const strengthsJson = JSON.stringify(answer.feedback?.strengths || []);
     const gapsJson = JSON.stringify(answer.feedback?.gaps || []);
 
-    if (existingAnswer) {
-      // Update existing turn answer
+    if (existingAnswers.length > 0) {
+      const primary = existingAnswers[0];
+      // Prune any duplicate records created during concurrent race conditions
+      if (existingAnswers.length > 1) {
+        const duplicateIds = existingAnswers.slice(1).map((a) => a.id);
+        await tx.interviewAnswer.deleteMany({
+          where: { id: { in: duplicateIds } },
+        });
+      }
+
+      // Update primary turn answer
       return await tx.interviewAnswer.update({
-        where: { id: existingAnswer.id },
+        where: { id: primary.id },
         data: {
           answerText: answer.answerText,
           score: answer.feedback?.score || 0,
@@ -311,8 +339,10 @@ export async function persistReport(
       where: { id: sessionId },
     });
 
-    if (existingSession && existingSession.userId && userId && existingSession.userId !== userId) {
-      throw new Error("Cannot save report to another candidate's session");
+    if (existingSession && existingSession.userId && existingSession.userId !== "guest") {
+      if (!userId || existingSession.userId !== userId) {
+        throw new Error("Cannot save report to another candidate's session");
+      }
     }
 
     const durationMinutes = Math.max(1, Math.round(Number(report.durationMinutes) || (session?.durationSeconds ? session.durationSeconds / 60 : 15)));
@@ -328,7 +358,7 @@ export async function persistReport(
 
     if (session) {
       const skillsJson = JSON.stringify(session.setup?.skills || []);
-      const effectiveUserId = userId || session.userId || existingSession?.userId || null;
+      const effectiveUserId = userId || existingSession?.userId || null;
 
       await tx.interviewSession.upsert({
         where: { id: session.id },

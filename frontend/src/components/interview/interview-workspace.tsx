@@ -164,6 +164,10 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
         if (res.ok) {
           const data = await res.json();
           if (data.session && !cancelled) {
+            if (data.session.status === "completed") {
+              router.replace(`/report/${encodeURIComponent(sessionId)}`);
+              return;
+            }
             if (data.session.status === "terminated_integrity") {
               setIsTerminatedByIntegrity(true);
               setTerminationReason(
@@ -179,6 +183,40 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
               setShowPolicyModal(false);
             } else if (!isDemo && data.session.status !== "terminated_integrity") {
               setShowPolicyModal(true);
+            }
+
+            // Reconcile server-persisted answers so refresh restores answers from SQLite
+            if (data.session.answers && data.session.answers.length > 0) {
+              const dbAnswers: AnswerRecord[] = data.session.answers.map((a: any) => ({
+                questionId: a.questionId,
+                questionText: a.questionText,
+                category: a.category,
+                difficulty: a.difficulty,
+                answerText: a.answerText,
+                submittedAt: a.submittedAt,
+                feedback: {
+                  score: a.score || 0,
+                  strengths: safeJson(a.strengths, []),
+                  gaps: safeJson(a.gaps, []),
+                  adaptiveNote: a.adaptiveNote || "",
+                },
+              }));
+
+              setSession((prev) => {
+                if (!prev) return prev;
+                if (dbAnswers.length >= prev.answers.length) {
+                  const updated = {
+                    ...prev,
+                    status: (data.session.status as any) || prev.status,
+                    durationSeconds: data.session.durationSeconds || prev.durationSeconds,
+                    answers: dbAnswers,
+                    currentQuestionIndex: dbAnswers.length,
+                  };
+                  saveStoredSession(updated);
+                  return updated;
+                }
+                return prev;
+              });
             }
           }
         }
@@ -587,6 +625,13 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
     targetSession.endedAt = new Date().toISOString();
     targetSession.durationSeconds = elapsedSeconds;
     saveStoredSession(targetSession);
+
+    // Persist final session completion state to SQLite server-side
+    fetch("/api/interview/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session: targetSession }),
+    }).catch((err) => console.warn("Failed to persist final session completion to server:", err));
 
     try {
       let report: EvaluationReport;

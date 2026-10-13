@@ -95,44 +95,53 @@ export function Navbar() {
                   <LogOut className="h-3.5 w-3.5 text-rose-400" />
                   <span>Log Out</span>
                 </Button>
+                <Link href={user.role === "recruiter" ? "/dashboard" : "/setup"}>
+                  <Button size="sm" className="gap-2 shadow-sm bg-indigo-600 hover:bg-indigo-500 text-xs h-8">
+                    {user.role === "recruiter" ? "Dashboard" : "Start Interview"}
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Button>
+                </Link>
               </div>
             ) : (
               <div className="flex items-center gap-2">
                 <Link href="/login">
-                  <Button variant="ghost" size="sm" className="text-slate-300 hover:text-white text-xs">
+                  <Button variant="ghost" size="sm" className="text-slate-300 hover:text-white text-xs h-8">
                     <LogIn className="h-3.5 w-3.5 mr-1 text-slate-400" />
                     Sign In
                   </Button>
                 </Link>
                 <Link href="/signup">
-                  <Button variant="outline" size="sm" className="text-xs border-slate-800 hover:border-slate-700">
+                  <Button variant="outline" size="sm" className="text-xs border-slate-800 hover:border-slate-700 h-8">
                     Get Started
+                  </Button>
+                </Link>
+                <Link href="/login?redirect=/setup">
+                  <Button size="sm" className="gap-2 shadow-sm bg-indigo-600 hover:bg-indigo-500 text-xs h-8">
+                    Start Interview
+                    <ArrowRight className="h-3.5 w-3.5" />
                   </Button>
                 </Link>
               </div>
             )
           ) : (
-            <div className="w-[140px] h-8" />
-          )}
-
-          {!user && (
-            <Link href="/login?redirect=/setup">
-              <Button size="sm" className="gap-2 shadow-sm bg-indigo-600 hover:bg-indigo-500">
-                Start Interview
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
-            </Link>
+            <div className="flex items-center gap-2 animate-pulse" aria-hidden="true">
+              <div className="h-8 w-16 rounded-md bg-slate-800/60" />
+              <div className="h-8 w-24 rounded-md bg-slate-800/60" />
+              <div className="h-8 w-32 rounded-md bg-indigo-900/40" />
+            </div>
           )}
         </div>
 
         {/* Mobile Hamburger Button */}
         <div className="flex items-center md:hidden gap-2">
-          {!user && (
-            <Link href="/login?redirect=/setup">
+          {isMounted && !isLoading ? (
+            <Link href={user ? (user.role === "recruiter" ? "/dashboard" : "/setup") : "/login?redirect=/setup"}>
               <Button size="sm" className="text-xs px-2.5 h-8 bg-indigo-600 hover:bg-indigo-500">
-                Start
+                {user?.role === "recruiter" ? "Portal" : "Start"}
               </Button>
             </Link>
+          ) : (
+            <div className="w-12 h-8 rounded-md bg-indigo-900/40 animate-pulse" aria-hidden="true" />
           )}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -161,7 +170,7 @@ export function Navbar() {
           </div>
 
           <div className="pt-2 border-t border-slate-800 flex flex-col gap-2">
-            {isMounted && !isLoading && (
+            {isMounted && !isLoading ? (
               user ? (
                 <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-[#0e1628] border border-slate-800">
                   <div className="text-xs">
@@ -197,6 +206,8 @@ export function Navbar() {
                   </Link>
                 </div>
               )
+            ) : (
+              <div className="h-10 w-full rounded-lg bg-slate-800/40 animate-pulse" aria-hidden="true" />
             )}
 
             <Link href={user ? "/setup" : "/login?redirect=/setup"} onClick={() => setMobileMenuOpen(false)}>

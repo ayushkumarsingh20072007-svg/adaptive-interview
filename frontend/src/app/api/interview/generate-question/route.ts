@@ -25,11 +25,13 @@ export async function POST(req: NextRequest) {
         include: { answers: true },
       });
       if (session) {
-        if (session.userId && auth.authenticated && auth.user && auth.user.id !== session.userId) {
-          return NextResponse.json(
-            { error: "Forbidden: Cannot generate questions for another candidate's session" },
-            { status: 403 }
-          );
+        if (session.userId && session.userId !== "guest") {
+          if (!auth.authenticated || !auth.user || auth.user.id !== session.userId) {
+            return NextResponse.json(
+              { error: "Forbidden: Cannot generate questions for another candidate's session" },
+              { status: 403 }
+            );
+          }
         }
         if (session.status === "terminated_integrity") {
           return NextResponse.json(

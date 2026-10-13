@@ -140,31 +140,74 @@ export default function CandidateSetupPage() {
       setCandidateName(potentialName);
     }
 
-    if (file.type.includes("text") || fileExt === ".txt") {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const text = (ev.target?.result as string) || "";
+    // Call server-side /api/resume/parse route for genuine PDF/DOCX/TXT extraction
+    const formData = new FormData();
+    formData.append("file", file);
+
+    fetch("/api/resume/parse", {
+      method: "POST",
+      body: formData,
+    })
+      .then(async (res) => {
+        if (res.ok) {
+          const data = await res.json();
+          const profile = data.profile;
+          setResumeFile({
+            name: file.name,
+            size: formattedSize,
+            isSample: false,
+            previewUrl,
+            extractedSnippet: profile?.text || "",
+            detectedName: profile?.detectedName || (potentialName.length >= 3 ? potentialName : undefined),
+          });
+          if (profile?.detectedName && !candidateName) {
+            setCandidateName(profile.detectedName);
+          }
+          setIsResumeVerified(true);
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          // Fallback to client-side text if .txt
+          if (file.type.includes("text") || fileExt === ".txt") {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              const text = (ev.target?.result as string) || "";
+              setResumeFile({
+                name: file.name,
+                size: formattedSize,
+                isSample: false,
+                previewUrl,
+                extractedSnippet: text.slice(0, 2000),
+                detectedName: potentialName.length >= 3 ? potentialName : undefined,
+              });
+              setIsResumeVerified(true);
+            };
+            reader.readAsText(file);
+          } else {
+            setErrors((prev) => ({
+              ...prev,
+              resume: errData.error || "Failed to extract text from document. Please ensure it is not scanned or password-protected.",
+            }));
+            setResumeFile({
+              name: file.name,
+              size: formattedSize,
+              isSample: false,
+              previewUrl,
+              detectedName: potentialName.length >= 3 ? potentialName : undefined,
+            });
+            setIsResumeVerified(false);
+          }
+        }
+      })
+      .catch(() => {
         setResumeFile({
           name: file.name,
           size: formattedSize,
           isSample: false,
           previewUrl,
-          extractedSnippet: text.slice(0, 2000),
           detectedName: potentialName.length >= 3 ? potentialName : undefined,
         });
         setIsResumeVerified(false);
-      };
-      reader.readAsText(file);
-    } else {
-      setResumeFile({
-        name: file.name,
-        size: formattedSize,
-        isSample: false,
-        previewUrl,
-        detectedName: potentialName.length >= 3 ? potentialName : undefined,
       });
-      setIsResumeVerified(false);
-    }
 
     setErrors((prev) => {
       const next = { ...prev };

@@ -142,10 +142,7 @@ export default function DashboardPage() {
         if (res.ok) {
           const data = await res.json();
           if (data.reports && !cancelled) {
-            const mergedMap = new Map<string, EvaluationReport>();
-            initial.forEach((r) => mergedMap.set(r.sessionId, r));
-            data.reports.forEach((r: EvaluationReport) => mergedMap.set(r.sessionId, r));
-            setReports(Array.from(mergedMap.values()).sort((a, b) => (a.completedAt < b.completedAt ? 1 : -1)));
+            setReports(data.reports.sort((a: EvaluationReport, b: EvaluationReport) => (a.completedAt < b.completedAt ? 1 : -1)));
           }
         }
       })

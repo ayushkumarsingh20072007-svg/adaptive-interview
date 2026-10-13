@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveRequestUser } from "@/lib/resolve-user";
 import { getReportById, getRecruiterReview } from "@/lib/report-persistence";
 import { ALL_DEMO_REPORTS, SAMPLE_REPORT } from "@/lib/mock-data";
+import { prisma } from "@/lib/prisma";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -18,20 +19,18 @@ export async function GET(req: NextRequest, { params }: Props) {
     }
 
     // 1. Check demo benchmarks first
+    //    Demo-session-* reports use synthetic demo userIds (e.g. "usr_demo_alex") that are NOT
+    //    real registered users — they are public benchmark reports meant to be viewable by anyone.
+    //    Strip recruiter-private shortlistNotes from non-recruiter responses, but allow public access.
     if (id === "demo-session" || id.startsWith("demo-session-")) {
       const demo = ALL_DEMO_REPORTS.find(
         (r) => r.sessionId === id || (id === "demo-session" && r.sessionId === "demo-session-alex")
       );
       const baseDemo = demo ? { ...demo } : { ...SAMPLE_REPORT };
 
-      // Enforce candidate ownership on demo reports if tied to a specific candidate
-      if (baseDemo.userId && baseDemo.userId !== "guest" && !isRecruiter) {
-        if (auth.authenticated && auth.user && auth.user.id !== baseDemo.userId) {
-          return NextResponse.json(
-            { error: "Forbidden: You are not authorized to view this candidate's report" },
-            { status: 403 }
-          );
-        }
+      // Strip recruiter-only private notes from non-recruiter responses
+      if (!isRecruiter) {
+        baseDemo.shortlistNotes = undefined;
       }
 
       // Check if recruiter saved review in SQLite for this demo session
@@ -39,8 +38,6 @@ export async function GET(req: NextRequest, { params }: Props) {
       if (dbReview) {
         baseDemo.shortlistStatus = dbReview.status;
         baseDemo.shortlistNotes = isRecruiter ? dbReview.notes : undefined;
-      } else if (!isRecruiter) {
-        baseDemo.shortlistNotes = undefined;
       }
 
       return NextResponse.json({ report: baseDemo });
@@ -58,6 +55,20 @@ export async function GET(req: NextRequest, { params }: Props) {
     }
 
     if (status === 404 || !report) {
+      // No EvaluationReport row yet — but the session may be private.
+      // Check session-level ownership to avoid leaking private session existence
+      // and ensure unauthorized callers get 403, not 404.
+      const session = await prisma.interviewSession.findUnique({ where: { id } });
+      if (session && session.userId && session.userId !== "guest") {
+        const authorized =
+          isRecruiter || (auth.authenticated && auth.user && auth.user.id === session.userId);
+        if (!authorized) {
+          return NextResponse.json(
+            { error: "Forbidden: You are not authorized to view this candidate's report" },
+            { status: 403 }
+          );
+        }
+      }
       return NextResponse.json({ error: "Evaluation report not found" }, { status: 404 });
     }
 
