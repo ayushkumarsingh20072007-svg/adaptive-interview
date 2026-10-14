@@ -47,9 +47,6 @@ export function Navbar() {
               </span>
             </div>
           </Link>
-          <div className="hidden sm:block ml-2">
-            <Badge variant="indigo">SaaS Platform</Badge>
-          </div>
         </div>
 
         {/* Desktop Navigation Links */}
