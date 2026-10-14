@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { callGemini, parseGeminiJson } from "@/lib/gemini";
-import { InterviewSession, EvaluationReport, SkillMetric, SkillStatusCategory } from "@/lib/types";
+import { InterviewSession, EvaluationReport, SkillMetric, SkillStatusCategory, AnswerRecord } from "@/lib/types";
 import { resolveRequestUser } from "@/lib/resolve-user";
 import { persistReport, mapDbReportToDomain } from "@/lib/report-persistence";
 import { generateEvaluationReport } from "@/lib/interview-engine";

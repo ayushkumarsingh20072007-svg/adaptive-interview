@@ -141,9 +141,7 @@ export async function POST(req: NextRequest) {
       ? 'Recent conversation:\n' + historyBlock + '\n\nCandidate new message:\n<candidate_input_untrusted>\n' + sanitizedCandidateMessage + '\n</candidate_input_untrusted>'
       : 'Candidate message:\n<candidate_input_untrusted>\n' + sanitizedCandidateMessage + '\n</candidate_input_untrusted>';
 
-    const fullPrompt = systemInstruction + '\n\n' + conversationBlock + '\n\nAI Coach:';
-
-    const rawResponse = await callGemini(fullPrompt);
+    const rawResponse = await callGemini(conversationBlock + '\n\nAI Coach:', systemInstruction);
     let assistantMessage = rawResponse.trim();
 
     // Post-generation defense check in strict interview mode:
@@ -152,7 +150,7 @@ export async function POST(req: NextRequest) {
       assistantMessage = "As an integrity coach in active interview mode, I cannot provide code solutions. Please implement your solution independently.";
     }
 
-    return NextResponse.json({ message: assistantMessage, mode, modelUsed: 'gemini-3.8-flash' });
+    return NextResponse.json({ message: assistantMessage, mode, modelUsed: 'gemini-3.7-flash' });
   } catch (err) {
     console.error('[ai-assistant/chat] Error:', err);
     const fallbackMessage = body?.mode === 'interview'

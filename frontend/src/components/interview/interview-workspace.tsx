@@ -58,6 +58,16 @@ interface InterviewWorkspaceProps {
 
 type AiStatus = "loading" | "ready" | "evaluating" | "branching" | "finishing" | "error";
 
+function safeJson<T>(raw: unknown, fallback: T): T {
+  if (Array.isArray(raw)) return raw as unknown as T;
+  if (typeof raw !== "string") return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
   const router = useRouter();
   const { user, isLoading: isAuthLoading } = useAuth();

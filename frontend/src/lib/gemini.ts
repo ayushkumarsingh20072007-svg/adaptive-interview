@@ -7,8 +7,8 @@ import { GoogleGenAI } from "@google/genai";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
 // Primary and fallback models
-const PRIMARY_MODEL = "gemini-3.8-flash";
-const FALLBACK_MODEL = "gemini-3.7-flash";
+const PRIMARY_MODEL = "gemini-3.7-flash";
+const FALLBACK_MODEL = "gemini-3.5-flash-lite";
 
 let _client: GoogleGenAI | null = null;
 let _currentKey: string = "";
@@ -25,10 +25,13 @@ export function getClient(): GoogleGenAI {
 /**
  * Call Gemini with automatic retry and model fallback.
  */
-export async function callGemini(prompt: string): Promise<string> {
+export async function callGemini(
+  prompt: string,
+  systemInstruction?: string
+): Promise<string> {
   const client = getClient();
   const models = [PRIMARY_MODEL, FALLBACK_MODEL];
-  const delays = [0, 1500];
+  const delays = [0, 2000];
 
   let lastError: Error | null = null;
 
@@ -41,10 +44,11 @@ export async function callGemini(prompt: string): Promise<string> {
       const callPromise = client.interactions.create({
         model: models[attempt],
         input: prompt,
+        ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
         store: false,
       });
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Gemini API call timed out after 6.5s")), 6500)
+        setTimeout(() => reject(new Error("Gemini API call timed out after 25s")), 25000)
       );
 
       const interaction = await Promise.race([callPromise, timeoutPromise]);
