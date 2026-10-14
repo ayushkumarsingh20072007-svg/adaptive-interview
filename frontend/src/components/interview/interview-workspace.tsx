@@ -57,6 +57,8 @@ import { AiAssistantPanel } from "@/components/interview/ai-assistant-panel";
 import { useAuth } from "@/lib/auth-context";
 import { useCameraMonitor, CameraMonitorEvent } from "@/lib/use-camera-monitor";
 import { CameraPreview } from "@/components/interview/camera-preview";
+import { VoiceInputControl } from "@/components/interview/voice-input-control";
+import { appendSpeechToAnswer } from "@/lib/speech-recognition";
 
 interface InterviewWorkspaceProps {
   sessionId: string;
@@ -615,6 +617,16 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
     if (inputError) setInputError(null);
   }
 
+  const handleVoiceTranscript = React.useCallback((transcript: string) => {
+    setAnswerText((prev) => {
+      const updated = appendSpeechToAnswer(prev, transcript);
+      setCharacterCount(updated.length);
+      setWordCount(updated.trim() ? updated.trim().split(/\s+/).length : 0);
+      return updated;
+    });
+    setInputError(null);
+  }, []);
+
   function formatTime(totalSeconds: number): string {
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
@@ -1170,6 +1182,12 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
               disabled={isProcessing}
               placeholder="Structure your answer clearly. Explain your decision, trade-offs, edge cases, and rationale..."
               className="font-mono text-sm leading-relaxed p-4 sm:p-5 rounded-xl bg-[#070c18] border-slate-800 text-slate-100 placeholder:text-slate-500 focus-visible:border-indigo-500/80 focus-visible:ring-2 focus-visible:ring-indigo-500/20 shadow-inner min-h-[200px]"
+            />
+
+            {/* Voice Input Toolbar */}
+            <VoiceInputControl
+              onTranscriptReceived={handleVoiceTranscript}
+              disabled={isProcessing || isTerminatedByIntegrity}
             />
 
             {inputError && (

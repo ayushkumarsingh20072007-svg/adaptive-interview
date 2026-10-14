@@ -9,8 +9,12 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { sessionId, answer } = body as { sessionId: string; answer: AnswerRecord };
 
-    if (!sessionId || !answer || !answer.questionId || !answer.answerText) {
+    if (!sessionId || !answer || !answer.questionId || !answer.answerText || !answer.answerText.trim()) {
       return NextResponse.json({ error: "Missing required answer or session parameters" }, { status: 400 });
+    }
+
+    if (answer.answerText.trim().length < 15) {
+      return NextResponse.json({ error: "Substantive answer required (at least 15 characters)" }, { status: 400 });
     }
 
     const effectiveUserId = auth.authenticated && auth.user ? auth.user.id : undefined;
