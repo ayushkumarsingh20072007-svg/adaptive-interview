@@ -637,11 +637,15 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
     saveStoredSession(targetSession);
 
     // Persist final session completion state to SQLite server-side
-    fetch("/api/interview/session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session: targetSession }),
-    }).catch((err) => console.warn("Failed to persist final session completion to server:", err));
+    try {
+      await fetch("/api/interview/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session: targetSession }),
+      });
+    } catch (err) {
+      console.warn("Failed to persist final session completion to server:", err);
+    }
 
     try {
       let report: EvaluationReport;

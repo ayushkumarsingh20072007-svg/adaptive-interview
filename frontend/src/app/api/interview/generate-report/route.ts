@@ -82,12 +82,30 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Interview completion / termination requirement for report generation / forceRegenerate
-    const currentSessionStatus = existingDbSession?.status || session.status;
-    if (currentSessionStatus !== "completed" && currentSessionStatus !== "terminated_integrity") {
+    const isCompletedOrTerminated =
+      existingDbSession?.status === "completed" ||
+      existingDbSession?.status === "terminated_integrity" ||
+      session.status === "completed" ||
+      session.status === "terminated_integrity";
+
+    if (!isCompletedOrTerminated) {
       return NextResponse.json(
         { error: "Cannot generate evaluation report: Interview session must be completed or terminated before generating a report." },
         { status: 400 }
       );
+    }
+
+    // If incoming session is completed but DB session is still in-progress, sync completion to DB
+    if (existingDbSession && existingDbSession.status === "in-progress" && session.status === "completed") {
+      await prisma.interviewSession.update({
+        where: { id: session.id },
+        data: {
+          status: "completed",
+          endedAt: session.endedAt || new Date().toISOString(),
+          durationSeconds: session.durationSeconds || existingDbSession.durationSeconds,
+        },
+      });
+      existingDbSession.status = "completed";
     }
 
     const isTerminated =
