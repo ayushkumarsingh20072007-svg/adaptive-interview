@@ -27,6 +27,11 @@ import {
   Quote,
   ShieldCheck,
   HelpCircle,
+  Camera,
+  CameraOff,
+  Users,
+  UserX,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -1129,7 +1134,7 @@ export function ReportView({ sessionId }: ReportViewProps) {
         )}
       </Card>
 
-      {/* ─── WORKSPACE INTEGRITY & FOCUS TELEMETRY ─── */}
+      {/* ─── WORKSPACE INTEGRITY & CAMERA MONITORING TELEMETRY ─── */}
       <Card className="rounded-2xl border border-slate-800/80 bg-[#0c1427]/95 shadow-md overflow-hidden">
         <CardHeader className="p-5 sm:p-6 border-b border-slate-800/80">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1152,7 +1157,7 @@ export function ReportView({ sessionId }: ReportViewProps) {
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <CardTitle className="text-base sm:text-lg font-bold text-white">
-                    Workspace Integrity & Focus Telemetry
+                    Workspace & Camera Integrity Telemetry
                   </CardTitle>
                   <Badge
                     variant={
@@ -1167,12 +1172,12 @@ export function ReportView({ sessionId }: ReportViewProps) {
                     {report.integrityStatus === "terminated_integrity"
                       ? "Policy Triggered · Terminated"
                       : report.integrityStatus === "warning_issued"
-                      ? "1 Incident Recorded"
-                      : "Verified Focus · Clean"}
+                      ? "Integrity Events Logged"
+                      : "Verified Focus & Camera · Clean"}
                   </Badge>
                 </div>
                 <CardDescription className="text-xs text-slate-400 mt-1">
-                  Browser window and tab visibility telemetry recorded under interview integrity policy {report.integritySummary?.policyVersion || "v1.0"}.
+                  Browser window visibility and on-device camera presence telemetry recorded under policy {report.integritySummary?.policyVersion || "v1.0"}.
                 </CardDescription>
               </div>
             </div>
@@ -1191,7 +1196,7 @@ export function ReportView({ sessionId }: ReportViewProps) {
             <div className="p-3.5 rounded-xl border border-slate-800/80 bg-[#080d19]/80">
               <span className="text-[11px] font-medium text-slate-400 block">Policy Version</span>
               <span className="text-sm font-semibold text-white mt-0.5 block font-mono">
-                {report.integritySummary?.policyVersion || "v1.0 (Dual-Incident Focus Rule)"}
+                {report.integritySummary?.policyVersion || "v1.0 (Focus & Camera Presence)"}
               </span>
             </div>
             <div className="p-3.5 rounded-xl border border-slate-800/80 bg-[#080d19]/80">
@@ -1216,57 +1221,115 @@ export function ReportView({ sessionId }: ReportViewProps) {
           {report.integritySummary?.events && report.integritySummary.events.length > 0 ? (
             <div className="space-y-3">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-300 block">
-                Recorded Focus-Loss Transitions ({report.integritySummary.events.length})
+                Recorded Telemetry Events ({report.integritySummary.events.length})
               </span>
               <div className="space-y-2.5">
-                {report.integritySummary.events.map((evt, idx) => (
-                  <div
-                    key={evt.id || idx}
-                    className="p-3.5 rounded-xl border border-slate-800/90 bg-[#080d19] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-500/10 text-amber-400 font-mono text-xs font-bold border border-amber-500/20">
-                        #{evt.eventNumber || idx + 1}
-                      </span>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-200">
-                            Focus-loss incident detected
-                          </span>
-                          <span className="font-mono text-[10px] text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
-                            {evt.eventType}
-                          </span>
-                        </div>
-                        <p className="text-slate-400 text-[11px] mt-0.5">
-                          Interview Context: {evt.stageQuestionId ? `Question ${evt.stageQuestionId}` : "Active Interview Turn"}
-                        </p>
-                      </div>
-                    </div>
+                {report.integritySummary.events.map((evt, idx) => {
+                  const isCameraEvent = evt.eventType.startsWith("camera_");
+                  let meta: any = null;
+                  try {
+                    if (evt.metadata) meta = JSON.parse(evt.metadata);
+                  } catch {}
 
-                    <div className="flex items-center gap-3 sm:text-right">
-                      <div className="space-y-0.5">
-                        <span className="text-slate-400 font-mono text-[11px] block">
-                          {new Date(evt.serverTimestamp).toLocaleString()}
+                  let eventTitle = "Focus-Loss Transition";
+                  let eventCategory = "Browser Focus";
+                  let IconComponent = Eye;
+                  let iconColor = "text-amber-400";
+                  let iconBg = "bg-amber-500/10 border-amber-500/20";
+                  let eventDetail = "Interview window or tab lost active browser focus.";
+
+                  if (evt.eventType === "camera_multiple_faces") {
+                    eventTitle = "Multiple Faces Detected";
+                    eventCategory = "Camera Integrity";
+                    IconComponent = Users;
+                    iconColor = "text-rose-400";
+                    iconBg = "bg-rose-500/10 border-rose-500/20";
+                    eventDetail = meta?.facesDetected
+                      ? `${meta.facesDetected} faces detected in frame during active verification.`
+                      : "More than one face was detected in camera view.";
+                  } else if (evt.eventType === "camera_missing_face") {
+                    eventTitle = "Face Not Detected in Frame";
+                    eventCategory = "Camera Presence";
+                    IconComponent = UserX;
+                    iconColor = "text-amber-400";
+                    iconBg = "bg-amber-500/10 border-amber-500/20";
+                    eventDetail = meta?.gracePeriodSec
+                      ? `Candidate face left camera view (grace period: ${meta.gracePeriodSec}s).`
+                      : "Candidate face was not detected in camera view.";
+                  } else if (evt.eventType === "camera_detector_crashed" || evt.eventType === "camera_detector_recovered") {
+                    eventTitle = evt.eventType === "camera_detector_crashed" ? "Detector Paused" : "Detector Resumed";
+                    eventCategory = "Camera Diagnostics";
+                    IconComponent = CameraOff;
+                    iconColor = "text-slate-400";
+                    iconBg = "bg-slate-500/10 border-slate-500/20";
+                    eventDetail = "Local browser face detector state transition.";
+                  } else if (evt.eventType === "visibility_hidden") {
+                    eventTitle = "Tab Switched / Page Hidden";
+                    eventDetail = "Browser tab was hidden or minimized.";
+                  } else if (evt.eventType === "window_blur") {
+                    eventTitle = "Window Unfocused";
+                    eventDetail = "Candidate shifted focus away from interview window.";
+                  }
+
+                  const isTerminating = evt.actionTaken === "interview_terminated";
+                  const actionBadgeText = isTerminating
+                    ? "Action: Session Terminated"
+                    : evt.eventType === "camera_missing_face"
+                    ? "Action: Presence Advisory Logged"
+                    : isCameraEvent
+                    ? "Action: Camera Warning"
+                    : `Action: Warning ${evt.eventNumber || 1} of 2 Displayed`;
+
+                  return (
+                    <div
+                      key={evt.id || idx}
+                      className="p-3.5 rounded-xl border border-slate-800/90 bg-[#080d19] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${iconBg} ${iconColor} border shrink-0`}>
+                          <IconComponent className="h-4 w-4" />
                         </span>
-                        <Badge
-                          variant={evt.actionTaken === "interview_terminated" ? "danger" : "warning"}
-                          className="text-[10px] px-2 py-0.5"
-                        >
-                          {evt.actionTaken === "interview_terminated"
-                            ? "Action: Session Terminated"
-                            : "Action: Warning 1 of 2 Displayed"}
-                        </Badge>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-slate-200">
+                              {eventTitle}
+                            </span>
+                            <span className="font-mono text-[10px] text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
+                              {eventCategory}
+                            </span>
+                            <span className="font-mono text-[10px] text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
+                              {evt.eventType}
+                            </span>
+                          </div>
+                          <p className="text-slate-400 text-[11px] mt-0.5">
+                            {eventDetail} • {evt.stageQuestionId ? `Question ${evt.stageQuestionId}` : "Active Interview Turn"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 sm:text-right shrink-0">
+                        <div className="space-y-0.5">
+                          <span className="text-slate-400 font-mono text-[11px] block">
+                            {new Date(evt.serverTimestamp).toLocaleString()}
+                          </span>
+                          <Badge
+                            variant={isTerminating ? "danger" : "warning"}
+                            className="text-[10px] px-2 py-0.5"
+                          >
+                            {actionBadgeText}
+                          </Badge>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ) : (
             <div className="p-4 rounded-xl border border-emerald-950/40 bg-emerald-950/20 flex items-center gap-3 text-xs text-emerald-200">
               <CheckCircle2 className="h-4.5 w-4.5 text-emerald-400 shrink-0" />
               <span>
-                <strong>Zero Focus-Loss Incidents:</strong> Candidate maintained active page visibility and focus throughout the entire monitored session.
+                <strong>Zero Integrity Incidents:</strong> Candidate maintained active page visibility and continuous single-candidate camera presence throughout the entire monitored session.
               </span>
             </div>
           )}
@@ -1275,7 +1338,7 @@ export function ReportView({ sessionId }: ReportViewProps) {
           <div className="p-3.5 rounded-xl border border-slate-800/80 bg-[#080d19]/60 text-slate-400 text-[11px] leading-relaxed flex items-start gap-2.5">
             <HelpCircle className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
             <span>
-              <strong>Integrity Telemetry Policy:</strong> Browser focus changes indicate that the interview window or tab lost active focus. Focus-loss events are technical signals and do not constitute conclusive evidence of misconduct. System notifications, accidental clicks, or OS dialogs can trigger focus changes.
+              <strong>Integrity Telemetry Policy:</strong> Workspace focus shifts and camera presence signals are recorded locally to ensure interview fairness. Focus events indicate window or tab state transitions; camera monitoring verifies single-candidate presence. In strict adherence to candidate privacy, face detection runs client-side in the browser—no video frames or biometrics are ever transmitted, saved, or processed on the server.
             </span>
           </div>
         </CardContent>

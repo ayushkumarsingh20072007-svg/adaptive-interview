@@ -97,13 +97,14 @@ export interface IntegrityEventSummary {
   id: string;
   sessionId: string;
   userId?: string | null;
-  eventType: string;
+  eventType: string; // "focus_loss" | "visibility_hidden" | "window_blur" | "camera_multiple_faces" | "camera_missing_face" | "camera_uncalibrated"
   eventNumber: number;
   policyVersion: string;
   stageQuestionId?: string | null;
   stageQuestionIndex?: number | null;
   actionTaken: "warning_issued" | "interview_terminated";
   serverTimestamp: string;
+  metadata?: string | null;
 }
 
 export interface InterviewSession {

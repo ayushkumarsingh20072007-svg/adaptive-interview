@@ -149,6 +149,7 @@ model InterviewIntegrityEvent {
   clientTimestamp    String?
   serverTimestamp    DateTime         @default(now())
   createdAt          DateTime         @default(now())
+  metadata           String?
 
   @@index([sessionId])
   @@index([userId])

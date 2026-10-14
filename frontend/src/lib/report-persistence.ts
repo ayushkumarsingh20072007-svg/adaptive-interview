@@ -95,6 +95,7 @@ export function mapDbReportToDomain(
               typeof e.serverTimestamp === "string"
                 ? e.serverTimestamp
                 : e.serverTimestamp?.toISOString() || new Date().toISOString(),
+            metadata: e.metadata || null,
           })),
           policyVersion: dbReport.session.integrityPolicyVersion || "v1.0",
           acknowledgedAt: dbReport.session.integrityPolicyAcknowledgedAt
@@ -784,13 +785,16 @@ export interface RecordViolationInput {
   stageQuestionIndex?: number;
   clientTimestamp?: string;
   policyVersion?: string;
+  metadata?: string;
+  terminationReason?: string;
+  forceAction?: "warning_issued" | "interview_terminated";
 }
 
 /**
- * Authoritative Server State Machine for Focus-Loss Incidents
+ * Authoritative Server State Machine for Workspace and Camera Integrity Incidents
  * Policy:
  * - 1st Incident: Records event, issues Warning 1 of 2.
- * - 2nd Incident: Records event, terminates session (status: 'terminated_integrity').
+ * - 2nd Incident / Persistent Multiple Faces: Records event, terminates session (status: 'terminated_integrity').
  * Idempotent: repeated submissions with same idempotencyKey return existing count.
  * Concurrency-safe: executes inside a Prisma SQLite transaction.
  */
@@ -804,6 +808,9 @@ export async function recordIntegrityViolation(input: RecordViolationInput) {
     stageQuestionIndex,
     clientTimestamp,
     policyVersion = "v1.0",
+    metadata,
+    terminationReason: inputTerminationReason,
+    forceAction,
   } = input;
 
   return await prisma.$transaction(async (tx) => {
@@ -866,14 +873,29 @@ export async function recordIntegrityViolation(input: RecordViolationInput) {
       throw err;
     }
 
-    // 6. Authoritative increment
-    const nextViolationCount = session.violationCount + 1;
-    const actionTaken = nextViolationCount >= 2 ? "interview_terminated" : "warning_issued";
-    const nextStatus = nextViolationCount >= 2 ? "terminated_integrity" : session.status;
-    const terminationReason =
-      nextViolationCount >= 2
-        ? "Exceeded allowable workspace focus-loss limit (2 of 2 incidents)"
-        : session.terminationReason;
+    // 6. Determine authoritative increment and action
+    const isDirectTermination = forceAction === "interview_terminated";
+    const nextViolationCount = isDirectTermination
+      ? Math.max(session.violationCount + 1, 2)
+      : session.violationCount + 1;
+
+    const actionTaken =
+      isDirectTermination || nextViolationCount >= 2
+        ? "interview_terminated"
+        : "warning_issued";
+
+    const nextStatus = actionTaken === "interview_terminated" ? "terminated_integrity" : session.status;
+
+    let terminationReason = session.terminationReason;
+    if (actionTaken === "interview_terminated") {
+      if (inputTerminationReason) {
+        terminationReason = inputTerminationReason;
+      } else if (eventType.startsWith("camera_multiple_faces")) {
+        terminationReason = "Multiple faces persisted in camera view beyond verification period";
+      } else {
+        terminationReason = "Exceeded allowable workspace focus-loss limit (2 of 2 incidents)";
+      }
+    }
 
     const event = await tx.interviewIntegrityEvent.create({
       data: {
@@ -888,6 +910,7 @@ export async function recordIntegrityViolation(input: RecordViolationInput) {
         idempotencyKey: idempotencyKey || null,
         clientTimestamp: clientTimestamp || null,
         serverTimestamp: new Date(),
+        metadata: metadata || null,
       },
     });
 
@@ -897,7 +920,7 @@ export async function recordIntegrityViolation(input: RecordViolationInput) {
         violationCount: nextViolationCount,
         status: nextStatus,
         terminationReason,
-        endedAt: nextViolationCount >= 2 ? new Date() : undefined,
+        endedAt: actionTaken === "interview_terminated" ? new Date() : undefined,
       },
       include: {
         integrityEvents: {
@@ -951,6 +974,8 @@ export async function getIntegrityAudit(sessionId: string) {
       stageQuestionIndex: e.stageQuestionIndex,
       actionTaken: e.actionTaken as "warning_issued" | "interview_terminated",
       serverTimestamp: e.serverTimestamp.toISOString(),
+      metadata: e.metadata || null,
     })),
   };
 }
+

@@ -33,12 +33,30 @@ export async function POST(req: NextRequest) {
 
     // Guard: Prevent client from attempting to forge authoritative violation count
     if ("violationCount" in body || "actionTaken" in body || "status" in body) {
-      // Ignore or reject client attempts to set authoritative counters
       console.warn(`[api/interview/integrity/event] Ignored client-supplied counter/status fields for session ${sessionId}`);
     }
 
     // Never trust client-supplied userId: derive strictly from authenticated server session
     const effectiveUserId = auth.authenticated && auth.user ? auth.user.id : undefined;
+
+    // Accept optional camera-specific metadata (face count, detection method, etc.) for audit transparency
+    const metadata = typeof body.metadata === "string" ? body.metadata : undefined;
+
+    // Only allow forceAction for camera-type events (never for focus_loss / window_blur / visibility_hidden)
+    // This ensures client cannot arbitrarily terminate focus-loss-based sessions via camera event path
+    const isCameraEventType =
+      typeof eventType === "string" &&
+      (eventType === "camera_multiple_faces" || eventType === "camera_missing_face");
+
+    const forceAction: "interview_terminated" | undefined =
+      body.forceAction === "interview_terminated" && isCameraEventType
+        ? "interview_terminated"
+        : undefined;
+
+    const terminationReason: string | undefined =
+      typeof body.terminationReason === "string" && isCameraEventType
+        ? body.terminationReason
+        : undefined;
 
     const result = await recordIntegrityViolation({
       sessionId,
@@ -49,6 +67,9 @@ export async function POST(req: NextRequest) {
       stageQuestionIndex,
       clientTimestamp,
       policyVersion,
+      metadata,
+      forceAction,
+      terminationReason,
     });
 
     const isDuplicate = Boolean(result.idempotent);

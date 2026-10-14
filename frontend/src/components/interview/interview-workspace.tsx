@@ -19,6 +19,10 @@ import {
   ShieldAlert,
   ShieldCheck,
   ArrowRight,
+  Camera,
+  CameraOff,
+  Users,
+  UserX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -51,6 +55,8 @@ import { evaluateAnswer as mockEvaluate, getNextAdaptiveQuestion as mockNextQ, g
 import { useIsMounted } from "@/lib/use-mounted";
 import { AiAssistantPanel } from "@/components/interview/ai-assistant-panel";
 import { useAuth } from "@/lib/auth-context";
+import { useCameraMonitor, CameraMonitorEvent } from "@/lib/use-camera-monitor";
+import { CameraPreview } from "@/components/interview/camera-preview";
 
 interface InterviewWorkspaceProps {
   sessionId: string;
@@ -144,9 +150,121 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
   const [terminationReason, setTerminationReason] = React.useState<string | null>(null);
   const [isAcknowledgingPolicy, setIsAcknowledgingPolicy] = React.useState<boolean>(false);
 
+  // Camera integrity warning modal state
+  const [showCameraWarningModal, setShowCameraWarningModal] = React.useState<boolean>(false);
+  const [cameraWarningType, setCameraWarningType] = React.useState<"multiple_faces" | "missing_face" | null>(null);
+
   // Focus-loss state machine refs (guards against duplicate triggers and race conditions)
   const isUnfocusedRef = React.useRef<boolean>(false);
   const lastViolationTimeRef = React.useRef<number>(0);
+
+  // Camera integrity event handler — called by useCameraMonitor on confirmed violations
+  const handleCameraIntegrityEvent = React.useCallback(
+    async (event: CameraMonitorEvent) => {
+      if (isTerminatedByIntegrity || session.status === "terminated_integrity" || session.status === "completed") {
+        return;
+      }
+
+      if (event.type === "camera_detector_crashed") {
+        console.warn("[CameraMonitor] Face detector became unavailable — monitoring paused, interview continues.");
+        return;
+      }
+      if (event.type === "camera_detector_recovered") {
+        console.info("[CameraMonitor] Face detector recovered.");
+        return;
+      }
+
+      if (event.type === "camera_missing_face") {
+        // Non-terminating warning: candidate left the frame
+        setCameraWarningType("missing_face");
+        setShowCameraWarningModal(true);
+
+        // Record as a non-terminating integrity note on the server
+        try {
+          await fetch("/api/interview/integrity/event", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionId: session.id,
+              eventType: "camera_missing_face",
+              idempotencyKey: event.idempotencyKey,
+              stageQuestionId: currentQuestion?.id,
+              stageQuestionIndex: session.answers.length + 1,
+              clientTimestamp: new Date().toISOString(),
+              policyVersion: "v1.0",
+              metadata: JSON.stringify({ gracePeriodSec: event.gracePeriodSec }),
+            }),
+          });
+        } catch (err) {
+          console.warn("[CameraMonitor] Failed to record missing-face event:", err);
+        }
+        return;
+      }
+
+      if (event.type === "camera_multiple_faces") {
+        const isTerminatingEvent = Boolean(event.forceTerminate);
+
+        if (isTerminatingEvent) {
+          // Multiple faces persisted through the full verification window → terminate
+          setCameraWarningType("multiple_faces");
+          setShowCameraWarningModal(false);
+
+          try {
+            const res = await fetch("/api/interview/integrity/event", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                sessionId: session.id,
+                eventType: "camera_multiple_faces",
+                idempotencyKey: event.idempotencyKey,
+                stageQuestionId: currentQuestion?.id,
+                stageQuestionIndex: session.answers.length + 1,
+                clientTimestamp: new Date().toISOString(),
+                policyVersion: "v1.0",
+                metadata: event.metadata,
+                forceAction: "interview_terminated",
+                terminationReason: "Multiple faces detected and persisted through the full verification window.",
+              }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.status === "terminated_integrity" || data.action === "terminated") {
+                setIsTerminatedByIntegrity(true);
+                setTerminationReason("Multiple faces were detected in the camera view and persisted through the full verification window. The interview was automatically concluded per the integrity policy.");
+                const terminatedSession = {
+                  ...session,
+                  status: "terminated_integrity" as const,
+                  endedAt: new Date().toISOString(),
+                  terminationReason: "Multiple faces detected — camera integrity policy triggered.",
+                };
+                setSession(terminatedSession);
+                saveStoredSession(terminatedSession);
+              }
+            }
+          } catch (err) {
+            console.warn("[CameraMonitor] Failed to record multi-face termination event:", err);
+          }
+        } else {
+          // First confirmed detection of multiple faces → show warning modal
+          setCameraWarningType("multiple_faces");
+          setShowCameraWarningModal(true);
+        }
+      }
+    },
+    [
+      isTerminatedByIntegrity,
+      session,
+      currentQuestion?.id,
+    ]
+  );
+
+  const cameraMonitor = useCameraMonitor({
+    enabled: !isDemo && integrityAcknowledged && !isTerminatedByIntegrity,
+    sessionId: session.id,
+    integrityAcknowledged,
+    isTerminated: isTerminatedByIntegrity || session.status === "terminated_integrity" || session.status === "completed",
+    onIntegrityEvent: handleCameraIntegrityEvent,
+  });
 
   const currentSetup = getStoredSession(sessionId)?.setup || session.setup || getStoredSetup(user?.id);
   const hasResume = Boolean(
@@ -913,6 +1031,32 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
                   Focus Monitored
                 </Badge>
               )}
+              {/* Camera status badge */}
+              {!isDemo && integrityAcknowledged && (
+                cameraMonitor.cameraStatus === "active" ? (
+                  cameraMonitor.detectionState === "multiple_faces" ? (
+                    <Badge variant="danger" className="gap-1 text-[10px] py-0.5 px-2">
+                      <Users className="h-2.5 w-2.5" />
+                      Multiple Faces
+                    </Badge>
+                  ) : cameraMonitor.detectionState === "no_face" ? (
+                    <Badge variant="warning" className="gap-1 text-[10px] py-0.5 px-2">
+                      <UserX className="h-2.5 w-2.5" />
+                      Face Missing
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="gap-1 text-[10px] py-0.5 px-2 border-emerald-500/30 text-emerald-400 bg-emerald-950/20">
+                      <Camera className="h-2.5 w-2.5" />
+                      Camera Active
+                    </Badge>
+                  )
+                ) : cameraMonitor.cameraStatus === "denied" ? (
+                  <Badge variant="warning" className="gap-1 text-[10px] py-0.5 px-2">
+                    <CameraOff className="h-2.5 w-2.5" />
+                    Camera Denied
+                  </Badge>
+                ) : null
+              )}
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
               Focus: {session.setup.interviewFocus.replace("-", " ").toUpperCase()} • Seniority: {session.setup.experienceLevel}
@@ -1107,8 +1251,23 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
           </div>
         </div>
 
-        {/* Right: Telemetry + History */}
+        {/* Right: Camera Preview + Telemetry + History */}
         <div className="space-y-4">
+          {/* Camera Preview Widget */}
+          {!isDemo && integrityAcknowledged && (
+            <CameraPreview
+              stream={cameraMonitor.stream}
+              cameraStatus={cameraMonitor.cameraStatus}
+              detectionState={cameraMonitor.detectionState}
+              isVerifyingMultiple={cameraMonitor.isVerifyingMultiple}
+              multipleVerificationRemainingSec={cameraMonitor.multipleVerificationRemainingSec}
+              isMissingFaceGraceActive={cameraMonitor.isMissingFaceGraceActive}
+              missingFaceGraceRemainingSec={cameraMonitor.missingFaceGraceRemainingSec}
+              detectorCrashed={cameraMonitor.detectorCrashed}
+              errorMessage={cameraMonitor.errorMessage}
+              onRetry={cameraMonitor.retryCamera}
+            />
+          )}
           <Card className="rounded-2xl border border-slate-800/80 bg-[#0c1427]/90 shadow-md overflow-hidden">
             <CardHeader className="p-5 border-b border-slate-800/80">
               <CardTitle className="text-sm font-bold">Session Telemetry</CardTitle>
@@ -1355,7 +1514,13 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
                 <strong className="text-white">Objective monitoring signal:</strong> Focus changes represent window/tab transition signals, not conclusive proof of cheating. Accidental focus changes can happen and are reviewed in context.
               </li>
               <li>
-                <strong className="text-white">No camera required:</strong> This feature solely tracks browser tab visibility and window focus. Webcam access is not required.
+                <strong className="text-white">Camera monitoring:</strong> Your camera will activate to verify that only one candidate is present. Only face count (0 / 1 / multiple) is assessed — no biometric data, identity, or emotions are inferred and no video is recorded or transmitted.
+              </li>
+              <li>
+                <strong className="text-white">Multiple faces:</strong> If multiple faces persist for 10 seconds, the interview will be automatically concluded per the integrity policy.
+              </li>
+              <li>
+                <strong className="text-white">Missing face grace period:</strong> A 15-second grace period applies if no face is detected. Returning to the camera view clears the countdown.
               </li>
             </ul>
           </div>
@@ -1414,6 +1579,80 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
               className="bg-amber-600 hover:bg-amber-500 text-white font-semibold"
             >
               I Understand & Resume Interview
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Camera Integrity Warning Modal (multiple faces / missing face) */}
+      <Modal
+        isOpen={showCameraWarningModal}
+        onClose={() => setShowCameraWarningModal(false)}
+        title={
+          cameraWarningType === "multiple_faces"
+            ? "Camera Alert — Multiple Faces Detected"
+            : "Camera Alert — Face Not Detected"
+        }
+        description={
+          cameraWarningType === "multiple_faces"
+            ? "More than one person appears to be in view of your camera."
+            : "Your face is no longer visible in the camera view."
+        }
+        className="max-w-md"
+      >
+        <div className="space-y-4 text-xs text-slate-300">
+          {cameraWarningType === "multiple_faces" ? (
+            <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800/60 text-rose-200 space-y-2">
+              <div className="flex items-center gap-2 font-bold text-rose-300 text-sm">
+                <Users className="h-4.5 w-4.5 text-rose-400 shrink-0" />
+                <span>Multiple Faces Detected</span>
+              </div>
+              <p className="leading-relaxed">
+                More than one face is visible in the camera feed. Only the candidate being
+                interviewed may be present in frame. If this is not resolved, the interview
+                will be automatically concluded when the verification window expires.
+              </p>
+              {cameraMonitor.isVerifyingMultiple && cameraMonitor.multipleVerificationRemainingSec > 0 && (
+                <div className="mt-3 flex items-center justify-between">
+                  <span className="text-rose-300 font-semibold">Auto-terminate in:</span>
+                  <span className="font-mono text-white text-lg font-bold">
+                    {cameraMonitor.multipleVerificationRemainingSec}s
+                  </span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-800/60 text-amber-200 space-y-2">
+              <div className="flex items-center gap-2 font-bold text-amber-300 text-sm">
+                <UserX className="h-4.5 w-4.5 text-amber-400 shrink-0" />
+                <span>Face Not Visible</span>
+              </div>
+              <p className="leading-relaxed">
+                Your face is no longer detectable in the camera view. Please ensure you are
+                centered in front of your camera and the area is adequately lit.
+              </p>
+              {cameraMonitor.isMissingFaceGraceActive && cameraMonitor.missingFaceGraceRemainingSec > 0 && (
+                <div className="mt-3 flex items-center justify-between">
+                  <span className="text-amber-300 font-semibold">Grace period remaining:</span>
+                  <span className="font-mono text-white text-lg font-bold">
+                    {cameraMonitor.missingFaceGraceRemainingSec}s
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          <p className="text-slate-400 text-[11px] leading-relaxed">
+            Your current question, entered response text, and all submitted answers remain fully preserved.
+          </p>
+
+          <div className="flex justify-end pt-2">
+            <Button
+              size="sm"
+              onClick={() => setShowCameraWarningModal(false)}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold"
+            >
+              I Understand — I&apos;ll Correct This
             </Button>
           </div>
         </div>
