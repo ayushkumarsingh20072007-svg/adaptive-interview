@@ -32,6 +32,8 @@ export interface CameraPreviewProps {
   onRetry?: () => void;
   /** @deprecated use onRetry */
   onRetryPermission?: () => void;
+  onStartCamera?: () => void;
+  onStopCamera?: () => void;
   compact?: boolean;
 }
 
@@ -48,6 +50,8 @@ export function CameraPreview({
   detectorCrashed = false,
   onRetry,
   onRetryPermission,
+  onStartCamera,
+  onStopCamera,
   compact = false,
 }: CameraPreviewProps) {
   const handleRetry = onRetry ?? onRetryPermission;
@@ -93,6 +97,14 @@ export function CameraPreview({
         variant: "warning" as const,
         icon: <AlertTriangle className="h-3 w-3" />,
         borderColor: "border-amber-500/50",
+      };
+    }
+    if (cameraStatus === "idle") {
+      return {
+        label: "Camera Inactive",
+        variant: "default" as const,
+        icon: <Camera className="h-3 w-3 text-slate-400" />,
+        borderColor: "border-slate-800/80",
       };
     }
 
@@ -205,12 +217,27 @@ export function CameraPreview({
                 )}
               </>
             ) : (
-              <>
-                <div className="h-10 w-10 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500">
+              <div className="flex flex-col items-center justify-center p-3 text-center space-y-2">
+                <div className="h-10 w-10 rounded-full bg-indigo-950/60 border border-indigo-800/80 flex items-center justify-center text-indigo-400">
                   <Camera className="h-5 w-5" />
                 </div>
-                <p className="text-xs text-slate-400">Camera Inactive</p>
-              </>
+                <div>
+                  <p className="text-xs text-slate-200 font-semibold">Proctoring Camera</p>
+                  <p className="text-[11px] text-slate-400 max-w-[210px] mt-0.5">
+                    Camera monitoring verifies candidate presence during the technical interview.
+                  </p>
+                </div>
+                {onStartCamera && (
+                  <Button
+                    size="sm"
+                    onClick={onStartCamera}
+                    className="text-xs h-7 px-3 bg-indigo-600 hover:bg-indigo-500 text-white font-medium gap-1.5 shadow-sm mt-1"
+                  >
+                    <Camera className="h-3.5 w-3.5" />
+                    Turn On Camera
+                  </Button>
+                )}
+              </div>
             )}
           </div>
         )}

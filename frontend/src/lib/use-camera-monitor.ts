@@ -343,7 +343,7 @@ export function useCameraMonitor(opts: UseCameraMonitorOptions): CameraMonitorSt
   }, [isTerminated, stopCountdowns, startMultipleVerificationCountdown, startMissingFaceGrace, onIntegrityEvent]);
 
   const startCamera = React.useCallback(async () => {
-    if (!enabled || typeof window === "undefined" || typeof navigator === "undefined") {
+    if (typeof window === "undefined" || typeof navigator === "undefined") {
       return;
     }
 

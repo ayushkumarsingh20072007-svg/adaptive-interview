@@ -139,10 +139,15 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
 
   // Interview Integrity & Workspace Monitoring state
   const [integrityAcknowledged, setIntegrityAcknowledged] = React.useState<boolean>(() => {
+    if (isDemo) return true;
     const stored = getStoredSession(sessionId);
     return Boolean(stored?.integrityPolicyAcknowledgedAt);
   });
-  const [showPolicyModal, setShowPolicyModal] = React.useState<boolean>(false);
+  const [showPolicyModal, setShowPolicyModal] = React.useState<boolean>(() => {
+    if (isDemo) return false;
+    const stored = getStoredSession(sessionId);
+    return !Boolean(stored?.integrityPolicyAcknowledgedAt);
+  });
   const [violationCount, setViolationCount] = React.useState<number>(0);
   const [showWarningModal, setShowWarningModal] = React.useState<boolean>(false);
   const [isTerminatedByIntegrity, setIsTerminatedByIntegrity] = React.useState<boolean>(() => {
@@ -261,7 +266,7 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
   );
 
   const cameraMonitor = useCameraMonitor({
-    enabled: !isDemo && integrityAcknowledged && !isTerminatedByIntegrity,
+    enabled: integrityAcknowledged && !isTerminatedByIntegrity,
     sessionId: session.id,
     integrityAcknowledged,
     isTerminated: isTerminatedByIntegrity || session.status === "terminated_integrity" || session.status === "completed",
@@ -313,6 +318,9 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
               setShowPolicyModal(false);
             } else if (!isDemo && data.session.status !== "terminated_integrity") {
               setShowPolicyModal(true);
+            } else if (isDemo) {
+              setIntegrityAcknowledged(true);
+              setShowPolicyModal(false);
             }
 
             // Reconcile server-persisted answers so refresh restores answers from SQLite
@@ -480,11 +488,17 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
         };
         setSession(updated);
         saveStoredSession(updated);
+        cameraMonitor.startCamera();
+      } else {
+        setIntegrityAcknowledged(true);
+        setShowPolicyModal(false);
+        cameraMonitor.startCamera();
       }
     } catch (err) {
       console.warn("Policy acknowledgement request failed:", err);
       setIntegrityAcknowledged(true);
       setShowPolicyModal(false);
+      cameraMonitor.startCamera();
     } finally {
       setIsAcknowledgingPolicy(false);
     }
@@ -1044,7 +1058,7 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
                 </Badge>
               )}
               {/* Camera status badge */}
-              {!isDemo && integrityAcknowledged && (
+              {integrityAcknowledged && (
                 cameraMonitor.cameraStatus === "active" ? (
                   cameraMonitor.detectionState === "multiple_faces" ? (
                     <Badge variant="danger" className="gap-1 text-[10px] py-0.5 px-2">
@@ -1062,12 +1076,32 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
                       Camera Active
                     </Badge>
                   )
-                ) : cameraMonitor.cameraStatus === "denied" ? (
+                ) : cameraMonitor.cameraStatus === "requesting" ? (
                   <Badge variant="warning" className="gap-1 text-[10px] py-0.5 px-2">
+                    <Camera className="h-2.5 w-2.5 animate-pulse" />
+                    Starting Camera...
+                  </Badge>
+                ) : cameraMonitor.cameraStatus === "denied" ? (
+                  <Badge variant="danger" className="gap-1 text-[10px] py-0.5 px-2">
                     <CameraOff className="h-2.5 w-2.5" />
                     Camera Denied
                   </Badge>
-                ) : null
+                ) : cameraMonitor.cameraStatus === "unavailable" || cameraMonitor.cameraStatus === "error" ? (
+                  <Badge variant="danger" className="gap-1 text-[10px] py-0.5 px-2">
+                    <CameraOff className="h-2.5 w-2.5" />
+                    Camera Error
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant="outline"
+                    className="gap-1 text-[10px] py-0.5 px-2 text-slate-400 border-slate-700 cursor-pointer hover:border-slate-500"
+                    onClick={() => cameraMonitor.startCamera()}
+                    title="Click to turn on camera"
+                  >
+                    <Camera className="h-2.5 w-2.5" />
+                    Camera Inactive
+                  </Badge>
+                )
               )}
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
@@ -1272,20 +1306,26 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
         {/* Right: Camera Preview + Telemetry + History */}
         <div className="space-y-4">
           {/* Camera Preview Widget */}
-          {!isDemo && integrityAcknowledged && (
-            <CameraPreview
-              stream={cameraMonitor.stream}
-              cameraStatus={cameraMonitor.cameraStatus}
-              detectionState={cameraMonitor.detectionState}
-              isVerifyingMultiple={cameraMonitor.isVerifyingMultiple}
-              multipleVerificationRemainingSec={cameraMonitor.multipleVerificationRemainingSec}
-              isMissingFaceGraceActive={cameraMonitor.isMissingFaceGraceActive}
-              missingFaceGraceRemainingSec={cameraMonitor.missingFaceGraceRemainingSec}
-              detectorCrashed={cameraMonitor.detectorCrashed}
-              errorMessage={cameraMonitor.errorMessage}
-              onRetry={cameraMonitor.retryCamera}
-            />
-          )}
+          <CameraPreview
+            stream={cameraMonitor.stream}
+            cameraStatus={cameraMonitor.cameraStatus}
+            detectionState={cameraMonitor.detectionState}
+            isVerifyingMultiple={cameraMonitor.isVerifyingMultiple}
+            multipleVerificationRemainingSec={cameraMonitor.multipleVerificationRemainingSec}
+            isMissingFaceGraceActive={cameraMonitor.isMissingFaceGraceActive}
+            missingFaceGraceRemainingSec={cameraMonitor.missingFaceGraceRemainingSec}
+            detectorCrashed={cameraMonitor.detectorCrashed}
+            errorMessage={cameraMonitor.errorMessage}
+            onRetry={cameraMonitor.retryCamera}
+            onStartCamera={async () => {
+              if (!integrityAcknowledged) {
+                setShowPolicyModal(true);
+              } else {
+                await cameraMonitor.startCamera();
+              }
+            }}
+            onStopCamera={cameraMonitor.stopCamera}
+          />
           <Card className="rounded-2xl border border-slate-800/80 bg-[#0c1427]/90 shadow-md overflow-hidden">
             <CardHeader className="p-5 border-b border-slate-800/80">
               <CardTitle className="text-sm font-bold">Session Telemetry</CardTitle>
