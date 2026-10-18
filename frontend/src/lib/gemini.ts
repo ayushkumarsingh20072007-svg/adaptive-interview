@@ -7,8 +7,8 @@ import { GoogleGenAI } from "@google/genai";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
 // Primary and fallback models
-const PRIMARY_MODEL = "gemini-3.7-flash";
-const FALLBACK_MODEL = "gemini-3.5-flash-lite";
+const PRIMARY_MODEL = "gemini-3.8-flash";
+const FALLBACK_MODEL = "gemini-3.7-flash";
 
 let _client: GoogleGenAI | null = null;
 let _currentKey: string = "";
@@ -48,7 +48,7 @@ export async function callGemini(
         store: false,
       });
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Gemini API call timed out after 25s")), 25000)
+        setTimeout(() => reject(new Error(`Gemini API call timed out after 25s (${models[attempt]})`)), 25000)
       );
 
       const interaction = await Promise.race([callPromise, timeoutPromise]);
@@ -61,10 +61,6 @@ export async function callGemini(
         `[Gemini] Attempt ${attempt + 1}/${models.length} failed (model: ${models[attempt]}):`,
         lastError.message
       );
-      // If quota/rate-limit hit on free tier, don't wait for secondary retry
-      if (lastError.message.includes("429") || lastError.message.toLowerCase().includes("rate limit") || lastError.message.toLowerCase().includes("quota")) {
-        break;
-      }
     }
   }
 
@@ -72,25 +68,47 @@ export async function callGemini(
 }
 
 /**
- * Parse JSON from Gemini output, stripping markdown fences and surrounding text if present.
+ * Parse JSON from Gemini output, stripping markdown fences, single-line comments,
+ * and trailing commas before braces or brackets.
  */
 export function parseGeminiJson<T>(raw: string): T {
-  // Strip markdown fences first
-  const cleaned = raw
+  // Strip markdown code fences first
+  let cleaned = raw
     .replace(/^```(?:json)?\s*/im, "")
     .replace(/\s*```$/m, "")
     .trim();
 
+  // Strip single-line comments // ...
+  cleaned = cleaned.replace(/\/\/[^\r\n]*/g, "");
+
   try {
     return JSON.parse(cleaned) as T;
   } catch {
-    // If direct parse fails, try extracting the substring from first '{' to last '}'
-    const start = cleaned.indexOf("{");
-    const end = cleaned.lastIndexOf("}");
+    // If direct parse fails, try extracting substring from first '{' or '[' to last '}' or ']'
+    const firstBrace = cleaned.indexOf("{");
+    const firstBracket = cleaned.indexOf("[");
+    let start = -1;
+    let end = -1;
+
+    if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+      start = firstBrace;
+      end = cleaned.lastIndexOf("}");
+    } else if (firstBracket !== -1) {
+      start = firstBracket;
+      end = cleaned.lastIndexOf("]");
+    }
+
     if (start !== -1 && end !== -1 && end > start) {
       const jsonSub = cleaned.slice(start, end + 1);
-      return JSON.parse(jsonSub) as T;
+      try {
+        return JSON.parse(jsonSub) as T;
+      } catch {
+        // Strip trailing commas before closing braces/brackets
+        const sanitized = jsonSub.replace(/,\s*([}\]])/g, "$1");
+        return JSON.parse(sanitized) as T;
+      }
     }
     throw new Error(`Failed to parse JSON from AI response: ${raw.slice(0, 200)}...`);
   }
 }
+

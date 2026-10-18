@@ -268,11 +268,19 @@ Respond ONLY with valid JSON (no markdown formatting, no code fences):
       aiReport = parseGeminiJson<any>(raw);
       console.log(`[🤖 Gemini AI] Day 2 Report synthesis received from Gemini.`);
     } catch (aiErr) {
-      console.warn("[🤖 Gemini AI] AI call failed or timed out:", aiErr);
-      return NextResponse.json(
-        { error: "AI evaluation service failed to generate report. Please try again or submit with deterministic evaluation." },
-        { status: 502 }
-      );
+      console.warn("[🤖 Gemini AI] AI report call failed or timed out. Falling back to calibrated deterministic synthesis:", aiErr);
+      const fallbackReport = generateEvaluationReport(targetSession);
+      fallbackReport.userId = effectiveUserId || effectiveSetup.userId;
+      if (auth.user?.name) {
+        fallbackReport.candidateName = auth.user.name;
+      }
+      if (isTerminated) {
+        fallbackReport.verdict = "Terminated (Integrity Policy)";
+        fallbackReport.integrityStatus = "terminated_integrity";
+      }
+      fallbackReport.isDemoSimulation = true;
+      const savedReport = await persistReport(fallbackReport, targetSession, effectiveUserId || effectiveSetup.userId);
+      return NextResponse.json({ report: savedReport, fallbackUsed: true });
     }
 
     const validVerdicts = [

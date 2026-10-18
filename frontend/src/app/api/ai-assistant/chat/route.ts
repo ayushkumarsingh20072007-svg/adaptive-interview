@@ -150,7 +150,7 @@ export async function POST(req: NextRequest) {
       assistantMessage = "As an integrity coach in active interview mode, I cannot provide code solutions. Please implement your solution independently.";
     }
 
-    return NextResponse.json({ message: assistantMessage, mode, modelUsed: 'gemini-3.7-flash' });
+    return NextResponse.json({ message: assistantMessage, mode, modelUsed: 'gemini-3.8-flash' });
   } catch (err) {
     console.error('[ai-assistant/chat] Error:', err);
     const fallbackMessage = body?.mode === 'interview'
