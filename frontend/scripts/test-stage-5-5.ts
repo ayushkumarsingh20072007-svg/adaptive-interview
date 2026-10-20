@@ -1,7 +1,6 @@
 process.env.DATABASE_URL = process.env.DATABASE_URL || "file:./dev.db";
 
-import { prisma } from "../src/lib/prisma";
-import { persistReport } from "../src/lib/report-persistence";
+import { prisma } from "../src/lib/prisma.ts";
 
 const BASE_URL = "http://localhost:3000";
 
@@ -103,7 +102,26 @@ async function runTests() {
       answerRecords: [],
     };
 
-    await persistReport(reportPayload, candidateA.id);
+    await prisma.evaluationReport.upsert({
+      where: { sessionId: testSessionId },
+      create: {
+        sessionId: testSessionId,
+        candidateName: candidateA.name,
+        targetRole: "Full Stack Engineer",
+        experienceLevel: "senior",
+        interviewFocus: "mixed",
+        overallScore: 89,
+        verdict: "Strong Hire Recommendation",
+        durationMinutes: 15,
+        completedAt: new Date().toISOString(),
+        strengths: JSON.stringify(["Exceptional architectural depth"]),
+        areasToImprove: JSON.stringify(["Distributed transactions scaling"]),
+        actionableRoadmap: JSON.stringify(["Study consensus algorithms"]),
+        isDemoSimulation: false,
+        metrics: JSON.stringify([]),
+      },
+      update: {},
+    });
   } catch (err: any) {
     console.warn("Pre-seeding candidate session warning:", err.message);
   }

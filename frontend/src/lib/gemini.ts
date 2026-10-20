@@ -8,7 +8,8 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
 // Primary and fallback models
 const PRIMARY_MODEL = "gemini-3.8-flash";
-const FALLBACK_MODEL = "gemini-3.7-flash";
+const FALLBACK_MODEL = "gemini-3.5-flash-lite";
+const TERTIARY_MODEL = "gemini-3.1-flash-lite";
 
 let _client: GoogleGenAI | null = null;
 let _currentKey: string = "";
@@ -30,8 +31,8 @@ export async function callGemini(
   systemInstruction?: string
 ): Promise<string> {
   const client = getClient();
-  const models = [PRIMARY_MODEL, FALLBACK_MODEL];
-  const delays = [0, 2000];
+  const models = [PRIMARY_MODEL, FALLBACK_MODEL, TERTIARY_MODEL];
+  const delays = [0, 1000, 2000];
 
   let lastError: Error | null = null;
 
@@ -48,7 +49,7 @@ export async function callGemini(
         store: false,
       });
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`Gemini API call timed out after 25s (${models[attempt]})`)), 25000)
+        setTimeout(() => reject(new Error(`Gemini API call timed out after 12s (${models[attempt]})`)), 12000)
       );
 
       const interaction = await Promise.race([callPromise, timeoutPromise]);

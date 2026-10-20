@@ -10,7 +10,7 @@
  * 7. Candidate Privacy & Role Guard (Candidates cannot access recruiter reviews, notes are stripped, cross-candidate access blocked)
  */
 
-import { prisma } from "../src/lib/prisma";
+import { prisma } from "../src/lib/prisma.ts";
 
 const BASE_URL = "http://localhost:3000";
 

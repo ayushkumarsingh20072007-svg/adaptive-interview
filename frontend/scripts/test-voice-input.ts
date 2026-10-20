@@ -25,9 +25,9 @@ import {
   getMockSpeechRecognition,
   normalizeSpeechError,
   appendSpeechToAnswer,
-  IBrowserSpeechRecognition,
-  SpeechRecognitionErrorDetails,
-} from "../src/lib/speech-recognition";
+  type IBrowserSpeechRecognition,
+  type SpeechRecognitionErrorDetails,
+} from "../src/lib/speech-recognition.ts";
 
 let passed = 0;
 let failed = 0;

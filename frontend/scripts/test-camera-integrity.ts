@@ -16,7 +16,7 @@
  * Run: npx ts-node --project tsconfig.scripts.json scripts/test-camera-integrity.ts
  */
 
-import { ConsecutiveDetectionTracker, FaceDetectionResult, setMockFaceDetector, getMockFaceDetector, DEFAULT_CONFIG } from "../src/lib/face-detection";
+import { ConsecutiveDetectionTracker, setMockFaceDetector, getMockFaceDetector, detectFacesInVideo, DEFAULT_CONFIG, type FaceDetectionResult } from "../src/lib/face-detection.ts";
 
 // ─── Minimal test harness ──────────────────────────────────────────────────────
 
@@ -301,19 +301,15 @@ section("14. API Route Security — forceAction Restrictions (specification chec
 section("15. Privacy Contract Verification");
 
 {
-  // The face detection engine processes frames in memory only
-  // Verify no external URLs are referenced in the detection module
-  const faceDetectionModule = require("../src/lib/face-detection");
-
-  assert(typeof faceDetectionModule.detectFacesInVideo === "function", "detectFacesInVideo is exported");
-  assert(typeof faceDetectionModule.setMockFaceDetector === "function", "setMockFaceDetector is exported");
-  assert(typeof faceDetectionModule.getMockFaceDetector === "function", "getMockFaceDetector is exported");
-  assert(typeof faceDetectionModule.ConsecutiveDetectionTracker === "function", "ConsecutiveDetectionTracker is exported");
+  assert(typeof detectFacesInVideo === "function", "detectFacesInVideo is exported");
+  assert(typeof setMockFaceDetector === "function", "setMockFaceDetector is exported");
+  assert(typeof getMockFaceDetector === "function", "getMockFaceDetector is exported");
+  assert(typeof ConsecutiveDetectionTracker === "function", "ConsecutiveDetectionTracker is exported");
 
   // Verify the DEFAULT_CONFIG has the required privacy-respecting defaults
-  const cfg = faceDetectionModule.DEFAULT_CONFIG;
+  const cfg = DEFAULT_CONFIG;
   assert(
-    !("uploadUrl" in cfg) && !("remoteEndpoint" in cfg) && !("apiKey" in cfg),
+    !("uploadUrl" in (cfg as any)) && !("remoteEndpoint" in (cfg as any)) && !("apiKey" in (cfg as any)),
     "DEFAULT_CONFIG contains NO upload/remote endpoint fields"
   );
 }

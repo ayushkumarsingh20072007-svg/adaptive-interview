@@ -14,9 +14,8 @@ if (!process.env.DATABASE_URL) {
   process.env.DATABASE_URL = "file:./dev.db";
 }
 
-import { prisma } from "../src/lib/prisma";
-import { appendSpeechToAnswer, normalizeSpeechError } from "../src/lib/speech-recognition";
-import { evaluateAnswer } from "../src/lib/interview-engine";
+import { prisma } from "../src/lib/prisma.ts";
+import { appendSpeechToAnswer, normalizeSpeechError } from "../src/lib/speech-recognition.ts";
 
 const BASE_URL = "http://localhost:3000";
 
@@ -449,18 +448,24 @@ async function runStage2VoiceAdaptiveIntegration() {
 
   // PROFILE E: Deterministic Fallback Resilience (AI Failure Simulation)
   console.log("-> Profile E: Deterministic fallback resilience on AI provider failure");
-  const fallbackFeedback = evaluateAnswer(
-    {
-      id: "q-fallback-test",
-      role: "fullstack",
-      category: "TypeScript",
-      difficulty: "intermediate",
-      questionText: "What is the difference between type and interface in TypeScript?",
-      hint: "Declaration merging",
-      expectedKeywords: ["declaration merging", "union", "primitives", "extends"],
-    },
-    "Interfaces support declaration merging across files, whereas types can represent union types, tuples, and primitive aliases directly."
-  );
+  const fallbackRes = await fetch(`${BASE_URL}/api/interview/evaluate-answer`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: candidate.cookie },
+    body: JSON.stringify({
+      question: {
+        id: "q-fallback-test",
+        role: "fullstack",
+        category: "TypeScript",
+        difficulty: "intermediate",
+        questionText: "What is the difference between type and interface in TypeScript?",
+        hint: "Declaration merging",
+        expectedKeywords: ["declaration merging", "union", "primitives", "extends"],
+      },
+      answerText: "Interfaces support declaration merging across files, whereas types can represent union types, tuples, and primitive aliases directly.",
+    }),
+  });
+  const fallbackJson = await fallbackRes.json();
+  const fallbackFeedback = fallbackJson.feedback;
   assert(
     fallbackFeedback.score >= 70,
     `Deterministic fallback evaluation computes calibrated score without AI (${fallbackFeedback.score}/100)`

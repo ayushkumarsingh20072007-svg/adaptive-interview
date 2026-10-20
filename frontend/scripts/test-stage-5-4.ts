@@ -1,6 +1,6 @@
 process.env.DATABASE_URL = process.env.DATABASE_URL || "file:./dev.db";
 
-import { prisma } from "../src/lib/prisma";
+import { prisma } from "../src/lib/prisma.ts";
 
 const BASE_URL = "http://localhost:3000";
 
@@ -533,7 +533,7 @@ async function runTests() {
             interviewFocus: "core-concepts",
             skills: ["Python", "AsyncIO"],
           },
-          status: "in-progress",
+          status: "completed",
           answers: [
             {
               questionId: "q-py-1",

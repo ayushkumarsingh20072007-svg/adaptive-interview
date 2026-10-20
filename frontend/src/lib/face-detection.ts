@@ -273,10 +273,16 @@ export class ConsecutiveDetectionTracker {
   private consecutiveSingleCount = 0;
   private lastConfirmedState: FaceDetectionState = "single_face";
 
+  private readonly requiredMultipleThreshold: number;
+  private readonly requiredMissingThreshold: number;
+
   constructor(
-    private readonly requiredMultipleThreshold = 3,
-    private readonly requiredMissingThreshold = 3
-  ) {}
+    requiredMultipleThreshold = 3,
+    requiredMissingThreshold = 3
+  ) {
+    this.requiredMultipleThreshold = requiredMultipleThreshold;
+    this.requiredMissingThreshold = requiredMissingThreshold;
+  }
 
   public process(result: FaceDetectionResult): {
     currentState: FaceDetectionState;

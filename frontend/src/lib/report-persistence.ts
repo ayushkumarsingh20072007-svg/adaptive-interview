@@ -1,5 +1,5 @@
-import { prisma } from "@/lib/prisma";
-import {
+import { prisma } from "./prisma";
+import type {
   EvaluationReport,
   InterviewSession,
   AnswerRecord,

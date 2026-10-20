@@ -1,7 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 
 const PRIMARY_MODEL = "gemini-3.8-flash";
-const FALLBACK_MODEL = "gemini-3.7-flash";
+const FALLBACK_MODEL = "gemini-3.5-flash-lite";
+const TERTIARY_MODEL = "gemini-3.1-flash-lite";
 
 let _client: GoogleGenAI | null = null;
 
@@ -15,8 +16,8 @@ export function getClient(): GoogleGenAI {
 
 export async function callGemini(prompt: string): Promise<string> {
   const client = getClient();
-  const models = [PRIMARY_MODEL, FALLBACK_MODEL];
-  const delays = [0, 1500];
+  const models = [PRIMARY_MODEL, FALLBACK_MODEL, TERTIARY_MODEL];
+  const delays = [0, 1000, 2000];
 
   let lastError: Error | null = null;
 
