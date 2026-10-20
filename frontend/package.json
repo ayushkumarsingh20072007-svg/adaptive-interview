@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "postinstall": "prisma generate",
     "prisma": "node --env-file=.env.local ../node_modules/prisma/build/index.js"
   },
   "dependencies": {
