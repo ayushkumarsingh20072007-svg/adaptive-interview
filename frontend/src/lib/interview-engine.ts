@@ -69,7 +69,7 @@ export function evaluateAnswer(question: Question, answerText: string): AnswerFe
   const isTooShort = normalized.length < 15;
 
   if (isEvasive || isTooShort) {
-    const penaltyScore = isEvasive ? 10 : Math.max(10, Math.min(25, Math.round(normalized.length * 1.5)));
+    const penaltyScore = isEvasive ? 16 : Math.max(15, Math.min(26, Math.round(normalized.length * 1.5)));
     return {
       score: penaltyScore,
       strengths: [],
@@ -105,23 +105,23 @@ export function evaluateAnswer(question: Question, answerText: string): AnswerFe
   const matchRatio = matchedKeywords.length / totalKw;
 
   // 3. Calibrated Scoring:
-  // - 0 keywords matched: candidate fundamentally missed the technical topic (score 15 - 35)
+  // - 0 keywords matched: candidate missed topic but attempted (score 18 - 34)
   // - Partial match (0.1 - 0.4): weak attempt with missing core components (score 36 - 55)
   // - Moderate match (0.4 - 0.7): acceptable foundational explanation (score 58 - 74)
   // - Strong match (>= 0.7): accurate, depth, keywords matched (score 76 - 95)
   let calculatedScore: number;
 
   if (matchedKeywords.length === 0) {
-    calculatedScore = Math.min(35, 15 + Math.min(15, Math.round(normalized.length / 25)));
+    calculatedScore = Math.max(18, Math.min(34, 18 + Math.min(14, Math.round(normalized.length / 25))));
   } else if (matchRatio < 0.4) {
-    calculatedScore = Math.round(35 + matchRatio * 45 + (normalized.length > 100 ? 5 : 0));
+    calculatedScore = Math.round(36 + matchRatio * 40 + (normalized.length > 100 ? 5 : 0));
   } else if (matchRatio < 0.7) {
     calculatedScore = Math.round(55 + matchRatio * 28 + (normalized.length > 120 ? 5 : 0));
   } else {
     calculatedScore = Math.round(75 + matchRatio * 18 + (normalized.length > 150 ? 5 : 0));
   }
 
-  const finalScore = Math.min(98, Math.max(10, calculatedScore));
+  const finalScore = Math.min(98, Math.max(16, calculatedScore));
 
   // Determine strengths
   const strengths: string[] = [];
@@ -250,8 +250,8 @@ export function generateEvaluationReport(session: InterviewSession): EvaluationR
 
   let averageScore = 0;
   if (totalAnswers > 0) {
-    const sum = answers.reduce((acc, curr) => acc + curr.feedback.score, 0);
-    averageScore = Math.round(sum / totalAnswers);
+    const sum = answers.reduce((acc, curr) => acc + Math.max(16, curr.feedback?.score || 16), 0);
+    averageScore = Math.max(18, Math.round(sum / totalAnswers));
   }
 
   // Category metrics aggregation
@@ -259,19 +259,19 @@ export function generateEvaluationReport(session: InterviewSession): EvaluationR
   for (const a of answers) {
     const existing = categoryMap.get(a.category) || { sum: 0, count: 0 };
     categoryMap.set(a.category, {
-      sum: existing.sum + a.feedback.score,
+      sum: existing.sum + Math.max(16, a.feedback?.score || 16),
       count: existing.count + 1,
     });
   }
 
   // Always ensure at least 2 metrics
   if (categoryMap.size === 0) {
-    categoryMap.set("Core Architecture", { sum: 0, count: 1 });
-    categoryMap.set("Problem Solving", { sum: 0, count: 1 });
+    categoryMap.set("Core Architecture", { sum: 20, count: 1 });
+    categoryMap.set("Problem Solving", { sum: 22, count: 1 });
   }
 
   const metrics: SkillMetric[] = Array.from(categoryMap.entries()).map(([cat, data], idx) => {
-    const catScore = Math.round(data.sum / data.count);
+    const catScore = Math.max(18, Math.round(data.sum / data.count));
     let level: SkillMetric["level"] = "Developing";
     if (catScore >= 85) level = "Mastery";
     else if (catScore >= 70) level = "Proficient";

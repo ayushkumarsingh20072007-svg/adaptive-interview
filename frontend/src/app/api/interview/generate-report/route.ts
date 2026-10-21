@@ -184,14 +184,14 @@ export async function POST(req: NextRequest) {
 
     let averageScore = 0;
     if (totalAnswers > 0) {
-      const sum = answers.reduce((acc, curr) => acc + curr.feedback.score, 0);
-      averageScore = Math.round(sum / totalAnswers);
+      const sum = answers.reduce((acc, curr) => acc + Math.max(16, curr.feedback?.score || 16), 0);
+      averageScore = Math.max(18, Math.round(sum / totalAnswers));
     }
 
     const transcript = answers
       .map(
         (a, idx) =>
-          `[Question ${idx + 1}] (${a.category} - ${a.difficulty}): "${a.questionText}"\n[Candidate Answer]: "${a.answerText}"\n[Turn Score]: ${a.feedback.score}/100\n[Strengths]: ${a.feedback.strengths.join("; ") || "None"}\n[Gaps]: ${a.feedback.gaps.join("; ") || "None"}`
+          `[Question ${idx + 1}] (${a.category} - ${a.difficulty}): "${a.questionText}"\n[Candidate Answer]: "${a.answerText}"\n[Turn Score]: ${Math.max(16, a.feedback.score || 16)}/100\n[Strengths]: ${a.feedback.strengths.join("; ") || "None"}\n[Gaps]: ${a.feedback.gaps.join("; ") || "None"}`
       )
       .join("\n\n");
 
@@ -210,12 +210,13 @@ ${transcript || "No candidate answers recorded."}
 
 EVALUATION RUBRIC & INSTRUCTIONS:
 1. Ground competency scores strictly in the candidate's actual answer performance:
-   - If answers were incorrect, flawed, or evasive (scores < 50), the competency score MUST be low (20-45) and marked 'claimed_unvalidated' with level 'Needs Focus' or 'Developing'.
-   - Do NOT inflate scores or award unearned marks to wrong answers.
+   - If answers were incorrect, flawed, or evasive (scores < 50), the competency score MUST be calibrated between 18 and 42 (level 'Needs Focus' or 'Developing'). NEVER assign an absolute 0 or single-digit score to attempted turns.
+   - Award realistic baseline credit (18-25%) for candidate participation and basic framing while rigorously documenting gaps under areasToImprove.
+   - Do NOT inflate scores beyond 50 for wrong answers.
 2. Evaluate 3 to 5 competencies tested in the interview.
 3. For each competency, determine the skill status:
-   - "demonstrated": sufficient answer evidence supports the skill with clear conceptual or practical execution.
-   - "claimed_unvalidated": claimed in resume/skills or attempted, but answer was vague, weak, incorrect, or lacked depth.
+   - "demonstrated": sufficient answer evidence supports the skill with clear conceptual or practical execution (score >= 70).
+   - "claimed_unvalidated": claimed in resume/skills or attempted, but answer was vague, weak, incorrect, or lacked depth (score 18-50).
    - "not_assessed": skill was not sufficiently tested or questioned in this session.
 4. Ground every assessment in VERBATIM candidate quotes:
    - "evidenceQuote" and "quote" MUST be exact word-for-word substrings of the candidate's actual answer text from the transcript.
@@ -231,7 +232,7 @@ Respond ONLY with valid JSON (no markdown formatting, no code fences):
   "metrics": [
     {
       "category": "<competency name>",
-      "score": <0-100 integer>,
+      "score": <18-100 integer>,
       "level": "<Needs Focus|Developing|Proficient|Mastery>",
       "totalEvaluated": <number of questions>,
       "status": "<demonstrated|claimed_unvalidated|not_assessed>",
@@ -370,14 +371,19 @@ Respond ONLY with valid JSON (no markdown formatting, no code fences):
         status = "not_assessed";
       }
 
+      const rawScore = Math.round(Number(m.score) || 0);
+      const calibratedScore = Math.min(100, Math.max(18, rawScore));
+
       return {
         category: m.category,
-        score: Math.min(100, Math.max(0, Math.round(m.score))),
-        level: (m.level as SkillMetric["level"]) || "Proficient",
+        score: calibratedScore,
+        level:
+          (m.level as SkillMetric["level"]) ||
+          (calibratedScore >= 75 ? "Proficient" : calibratedScore >= 50 ? "Developing" : "Needs Focus"),
         totalEvaluated: m.totalEvaluated || 1,
         status,
         confidence: m.confidence || (evidenceQuote ? "high" : "medium"),
-        explanation: m.explanation || `Evaluated with score ${m.score}% based on candidate responses.`,
+        explanation: m.explanation || `Evaluated with score ${calibratedScore}% based on candidate responses.`,
         rubricCriteria: m.rubricCriteria || ["Technical Accuracy", "Implementation Trade-offs"],
         evidenceQuote,
         questionReference: qRef,
@@ -387,8 +393,8 @@ Respond ONLY with valid JSON (no markdown formatting, no code fences):
     if (metrics.length === 0) {
       metrics.push({
         category: "Core Technical Skills",
-        score: averageScore,
-        level: "Proficient",
+        score: Math.max(18, averageScore),
+        level: averageScore >= 75 ? "Proficient" : averageScore >= 50 ? "Developing" : "Needs Focus",
         totalEvaluated: totalAnswers,
         status: averageScore >= 75 ? "demonstrated" : "claimed_unvalidated",
         confidence: "medium",
@@ -423,7 +429,7 @@ Respond ONLY with valid JSON (no markdown formatting, no code fences):
       interviewFocus: (session.setup?.interviewFocus || "mixed").replace("-", " ").toUpperCase(),
       completedAt: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
       durationMinutes: Math.max(1, Math.round((session.durationSeconds || 0) / 60)),
-      overallScore: averageScore,
+      overallScore: Math.max(18, averageScore),
       verdict: finalVerdict,
       metrics,
       strengths: (aiReport.strengths || []).slice(0, 3),
