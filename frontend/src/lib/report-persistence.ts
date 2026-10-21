@@ -10,6 +10,12 @@ import type {
   CandidateShortlistRecord,
 } from "./types";
 
+// In-memory fallbacks for serverless environments (e.g. Vercel read-only Lambda)
+const IN_MEMORY_SESSIONS = new Map<string, any>();
+const IN_MEMORY_ANSWERS = new Map<string, any[]>();
+const IN_MEMORY_REPORTS = new Map<string, EvaluationReport>();
+const IN_MEMORY_REVIEWS = new Map<string, CandidateShortlistRecord>();
+
 /**
  * Safely parse JSON string with fallback
  */
@@ -148,68 +154,75 @@ export async function persistSession(
   session: InterviewSession,
   userId?: string
 ) {
+  IN_MEMORY_SESSIONS.set(session.id, { ...session, userId });
   const skillsJson = JSON.stringify(session.setup?.skills || []);
 
-  const existing = await prisma.interviewSession.findUnique({
-    where: { id: session.id },
-  });
+  try {
+    const existing = await prisma.interviewSession.findUnique({
+      where: { id: session.id },
+    });
 
-  // Never allow an unauthorized or unauthenticated caller to overwrite another candidate's private session
-  if (existing && existing.userId && existing.userId !== "guest") {
-    if (!userId || existing.userId !== userId) {
-      throw new Error("Cannot overwrite another candidate's private session");
+    // Never allow an unauthorized or unauthenticated caller to overwrite another candidate's private session
+    if (existing && existing.userId && existing.userId !== "guest") {
+      if (!userId || existing.userId !== userId) {
+        throw new Error("Cannot overwrite another candidate's private session");
+      }
     }
+
+    const effectiveUserId = userId || existing?.userId || null;
+
+    // Prevent reviving or reverting completed or terminated sessions
+    const isTerminalExisting =
+      existing?.status === "completed" || existing?.status === "terminated_integrity";
+    const updatedStatus = isTerminalExisting ? existing.status : (session.status || "in-progress");
+
+    const isCompleted = updatedStatus === "completed" || session.status === "completed";
+    const finalEndedAt = isCompleted
+      ? (session.endedAt ? new Date(session.endedAt) : (existing?.endedAt || new Date()))
+      : (session.endedAt ? new Date(session.endedAt) : null);
+
+    return await prisma.interviewSession.upsert({
+      where: { id: session.id },
+      create: {
+        id: session.id,
+        userId: effectiveUserId,
+        candidateName: session.setup?.candidateName || "Candidate",
+        targetRole: session.setup?.targetRole || "fullstack",
+        experienceLevel: session.setup?.experienceLevel || "intermediate",
+        interviewFocus: session.setup?.interviewFocus || "mixed",
+        interviewLength: session.setup?.interviewLength || 20,
+        skills: skillsJson,
+        resumeFileName: session.setup?.resumeFileName || null,
+        isSampleResume: Boolean(session.setup?.isSampleResume),
+        status: session.status || "in-progress",
+        durationSeconds: session.durationSeconds || 0,
+        startedAt: session.startedAt ? new Date(session.startedAt) : new Date(),
+        endedAt: finalEndedAt,
+        integrityPolicyAcknowledgedAt: session.integrityPolicyAcknowledgedAt
+          ? new Date(session.integrityPolicyAcknowledgedAt)
+          : null,
+        integrityPolicyVersion: session.integrityPolicyVersion || null,
+        violationCount: session.violationCount || 0,
+        terminationReason: session.terminationReason || null,
+      },
+      update: {
+        status: updatedStatus,
+        durationSeconds: isTerminalExisting ? (existing?.durationSeconds || session.durationSeconds || 0) : (session.durationSeconds || 0),
+        endedAt: isCompleted ? finalEndedAt : (session.endedAt ? new Date(session.endedAt) : undefined),
+        userId: effectiveUserId || undefined,
+        integrityPolicyAcknowledgedAt: session.integrityPolicyAcknowledgedAt
+          ? new Date(session.integrityPolicyAcknowledgedAt)
+          : undefined,
+        integrityPolicyVersion: session.integrityPolicyVersion || undefined,
+        violationCount: session.violationCount !== undefined ? session.violationCount : undefined,
+        terminationReason: session.terminationReason || undefined,
+      },
+    });
+  } catch (err: any) {
+    if (err?.message?.includes("Cannot overwrite")) throw err;
+    console.warn("Prisma persistSession skipped (using in-memory fallback):", err);
+    return session as any;
   }
-
-  const effectiveUserId = userId || existing?.userId || null;
-
-  // Prevent reviving or reverting completed or terminated sessions
-  const isTerminalExisting =
-    existing?.status === "completed" || existing?.status === "terminated_integrity";
-  const updatedStatus = isTerminalExisting ? existing.status : (session.status || "in-progress");
-
-  const isCompleted = updatedStatus === "completed" || session.status === "completed";
-  const finalEndedAt = isCompleted
-    ? (session.endedAt ? new Date(session.endedAt) : (existing?.endedAt || new Date()))
-    : (session.endedAt ? new Date(session.endedAt) : null);
-
-  return await prisma.interviewSession.upsert({
-    where: { id: session.id },
-    create: {
-      id: session.id,
-      userId: effectiveUserId,
-      candidateName: session.setup?.candidateName || "Candidate",
-      targetRole: session.setup?.targetRole || "fullstack",
-      experienceLevel: session.setup?.experienceLevel || "intermediate",
-      interviewFocus: session.setup?.interviewFocus || "mixed",
-      interviewLength: session.setup?.interviewLength || 20,
-      skills: skillsJson,
-      resumeFileName: session.setup?.resumeFileName || null,
-      isSampleResume: Boolean(session.setup?.isSampleResume),
-      status: session.status || "in-progress",
-      durationSeconds: session.durationSeconds || 0,
-      startedAt: session.startedAt ? new Date(session.startedAt) : new Date(),
-      endedAt: finalEndedAt,
-      integrityPolicyAcknowledgedAt: session.integrityPolicyAcknowledgedAt
-        ? new Date(session.integrityPolicyAcknowledgedAt)
-        : null,
-      integrityPolicyVersion: session.integrityPolicyVersion || null,
-      violationCount: session.violationCount || 0,
-      terminationReason: session.terminationReason || null,
-    },
-    update: {
-      status: updatedStatus,
-      durationSeconds: isTerminalExisting ? (existing?.durationSeconds || session.durationSeconds || 0) : (session.durationSeconds || 0),
-      endedAt: isCompleted ? finalEndedAt : (session.endedAt ? new Date(session.endedAt) : undefined),
-      userId: effectiveUserId || undefined,
-      integrityPolicyAcknowledgedAt: session.integrityPolicyAcknowledgedAt
-        ? new Date(session.integrityPolicyAcknowledgedAt)
-        : undefined,
-      integrityPolicyVersion: session.integrityPolicyVersion || undefined,
-      violationCount: session.violationCount !== undefined ? session.violationCount : undefined,
-      terminationReason: session.terminationReason || undefined,
-    },
-  });
 }
 
 /**
@@ -220,11 +233,16 @@ export async function persistAnswer(
   answer: AnswerRecord,
   userId?: string
 ) {
-  return await prisma.$transaction(async (tx) => {
-    // 1. Ensure the session exists in SQLite
-    const existingSession = await tx.interviewSession.findUnique({
-      where: { id: sessionId },
-    });
+  const existingAnswers = IN_MEMORY_ANSWERS.get(sessionId) || [];
+  existingAnswers.push(answer);
+  IN_MEMORY_ANSWERS.set(sessionId, existingAnswers);
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      // 1. Ensure the session exists in SQLite
+      const existingSession = await tx.interviewSession.findUnique({
+        where: { id: sessionId },
+      });
 
     if (existingSession && existingSession.userId && existingSession.userId !== "guest") {
       if (!userId || existingSession.userId !== userId) {
@@ -313,6 +331,17 @@ export async function persistAnswer(
       },
     });
   });
+  } catch (err: any) {
+    if (
+      err?.message?.includes("Unauthorized") ||
+      err?.message?.includes("terminated") ||
+      err?.message?.includes("completed")
+    ) {
+      throw err;
+    }
+    console.warn("Prisma persistAnswer skipped (using in-memory fallback):", err);
+    return answer as any;
+  }
 }
 
 /**
@@ -333,18 +362,20 @@ export async function persistReport(
   }
 
   const sessionId = report.sessionId;
+  IN_MEMORY_REPORTS.set(sessionId, report);
 
-  return await prisma.$transaction(async (tx) => {
-    // Check ownership against existing session
-    const existingSession = await tx.interviewSession.findUnique({
-      where: { id: sessionId },
-    });
+  try {
+    return await prisma.$transaction(async (tx) => {
+      // Check ownership against existing session
+      const existingSession = await tx.interviewSession.findUnique({
+        where: { id: sessionId },
+      });
 
-    if (existingSession && existingSession.userId && existingSession.userId !== "guest") {
-      if (!userId || existingSession.userId !== userId) {
-        throw new Error("Cannot save report to another candidate's session");
+      if (existingSession && existingSession.userId && existingSession.userId !== "guest") {
+        if (!userId || existingSession.userId !== userId) {
+          throw new Error("Cannot save report to another candidate's session");
+        }
       }
-    }
 
     const durationMinutes = Math.max(1, Math.round(Number(report.durationMinutes) || (session?.durationSeconds ? session.durationSeconds / 60 : 15)));
     const durationSeconds = durationMinutes * 60;
@@ -537,7 +568,12 @@ export async function persistReport(
     });
 
     return mapDbReportToDomain(savedReport, savedReport.session?.answers);
-  });
+    });
+  } catch (err: any) {
+    if (err?.message?.includes("Cannot save report to another candidate")) throw err;
+    console.warn("Prisma persistReport skipped (using in-memory fallback):", err);
+    return report;
+  }
 }
 
 /**
@@ -549,44 +585,59 @@ export async function getReportById(
 ): Promise<{ report: EvaluationReport | null; status: 200 | 403 | 404 }> {
   const isRecruiter = user?.role === "recruiter";
 
-  const dbReport = await prisma.evaluationReport.findUnique({
-    where: { sessionId },
-    include: {
-      session: {
-        include: {
-          answers: true,
-          review: true,
-          integrityEvents: {
-            orderBy: { createdAt: "asc" },
+  try {
+    const dbReport = await prisma.evaluationReport.findUnique({
+      where: { sessionId },
+      include: {
+        session: {
+          include: {
+            answers: true,
+            review: true,
+            integrityEvents: {
+              orderBy: { createdAt: "asc" },
+            },
           },
         },
       },
-    },
-  });
+    });
 
-  if (!dbReport) {
-    return { report: null, status: 404 };
+    if (dbReport) {
+      // Authorization check
+      const reportUserId = dbReport.session?.userId;
+
+      // If report is tied to a specific user and caller is a candidate
+      if (reportUserId && reportUserId !== "guest") {
+        if (!isRecruiter) {
+          if (!user || user.id !== reportUserId) {
+            return { report: null, status: 403 };
+          }
+        }
+      }
+
+      const domainReport = mapDbReportToDomain(
+        dbReport,
+        dbReport.session?.answers,
+        { isRecruiter }
+      );
+
+      return { report: domainReport, status: 200 };
+    }
+  } catch (err) {
+    console.warn("Prisma getReportById error (checking memory fallback):", err);
   }
 
-  // Authorization check
-  const reportUserId = dbReport.session?.userId;
-
-  // If report is tied to a specific user and caller is a candidate
-  if (reportUserId && reportUserId !== "guest") {
-    if (!isRecruiter) {
-      if (!user || user.id !== reportUserId) {
+  // Check in-memory reports
+  const memReport = IN_MEMORY_REPORTS.get(sessionId);
+  if (memReport) {
+    if (memReport.userId && memReport.userId !== "guest" && !isRecruiter) {
+      if (!user || user.id !== memReport.userId) {
         return { report: null, status: 403 };
       }
     }
+    return { report: memReport, status: 200 };
   }
 
-  const domainReport = mapDbReportToDomain(
-    dbReport,
-    dbReport.session?.answers,
-    { isRecruiter }
-  );
-
-  return { report: domainReport, status: 200 };
+  return { report: null, status: 404 };
 }
 
 /**
@@ -597,29 +648,40 @@ export async function getAllPersistedReports(
 ): Promise<EvaluationReport[]> {
   const isRecruiter = user?.role === "recruiter";
 
-  const dbReports = await prisma.evaluationReport.findMany({
-    where: isRecruiter
-      ? undefined
-      : user?.id
-      ? { session: { userId: user.id } }
-      : { session: { userId: null } },
-    include: {
-      session: {
-        include: {
-          answers: true,
-          review: true,
-          integrityEvents: {
-            orderBy: { createdAt: "asc" },
+  try {
+    const dbReports = await prisma.evaluationReport.findMany({
+      where: isRecruiter
+        ? undefined
+        : user?.id
+        ? { session: { userId: user.id } }
+        : { session: { userId: null } },
+      include: {
+        session: {
+          include: {
+            answers: true,
+            review: true,
+            integrityEvents: {
+              orderBy: { createdAt: "asc" },
+            },
           },
         },
       },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+      orderBy: { createdAt: "desc" },
+    });
 
-  return dbReports.map((dbRep) =>
-    mapDbReportToDomain(dbRep, dbRep.session?.answers, { isRecruiter })
-  );
+    if (dbReports && dbReports.length > 0) {
+      return dbReports.map((dbRep) =>
+        mapDbReportToDomain(dbRep, dbRep.session?.answers, { isRecruiter })
+      );
+    }
+  } catch (err) {
+    console.warn("Prisma getAllPersistedReports failed (falling back to memory):", err);
+  }
+
+  // Fallback to in-memory reports
+  const allMem = Array.from(IN_MEMORY_REPORTS.values());
+  if (isRecruiter) return allMem;
+  return allMem.filter((r) => !r.userId || r.userId === user?.id);
 }
 
 export interface UpsertReviewInput {
@@ -638,57 +700,74 @@ export async function persistRecruiterReview(
   input: UpsertReviewInput
 ): Promise<CandidateShortlistRecord> {
   const { sessionId, candidateName, status, notes, reviewerId, reviewedBy } = input;
+  const now = new Date();
 
-  return await prisma.$transaction(async (tx) => {
-    // 1. Ensure InterviewSession exists in SQLite to satisfy the foreign key constraint
-    let existingSession = await tx.interviewSession.findUnique({
-      where: { id: sessionId },
-    });
+  const fallbackRecord: CandidateShortlistRecord = {
+    sessionId,
+    candidateName: candidateName || "Candidate",
+    status: status || "pending",
+    notes: notes ?? undefined,
+    reviewedBy: reviewedBy || undefined,
+    updatedAt: now.toISOString(),
+  };
 
-    if (!existingSession) {
-      existingSession = await tx.interviewSession.create({
-        data: {
-          id: sessionId,
-          candidateName: candidateName || "Candidate",
-          targetRole: "fullstack",
-          experienceLevel: "senior",
-          interviewFocus: "mixed",
-          interviewLength: 20,
-          skills: "[]",
-          status: "completed",
+  IN_MEMORY_REVIEWS.set(sessionId, fallbackRecord);
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      // 1. Ensure InterviewSession exists in SQLite to satisfy the foreign key constraint
+      let existingSession = await tx.interviewSession.findUnique({
+        where: { id: sessionId },
+      });
+
+      if (!existingSession) {
+        existingSession = await tx.interviewSession.create({
+          data: {
+            id: sessionId,
+            candidateName: candidateName || "Candidate",
+            targetRole: "fullstack",
+            experienceLevel: "senior",
+            interviewFocus: "mixed",
+            interviewLength: 20,
+            skills: "[]",
+            status: "completed",
+          },
+        });
+      }
+
+      // 2. Upsert RecruiterReview idempotently
+      const dbReview = await tx.recruiterReview.upsert({
+        where: { sessionId },
+        create: {
+          sessionId,
+          candidateName: candidateName || existingSession.candidateName || "Candidate",
+          status: status || "pending",
+          notes: notes !== undefined ? notes : null,
+          reviewerId,
+          reviewedBy,
+        },
+        update: {
+          status: status !== undefined ? status : undefined,
+          notes: notes !== undefined ? notes : undefined,
+          candidateName: candidateName || undefined,
+          reviewerId,
+          reviewedBy,
         },
       });
-    }
 
-    // 2. Upsert RecruiterReview idempotently
-    const dbReview = await tx.recruiterReview.upsert({
-      where: { sessionId },
-      create: {
-        sessionId,
-        candidateName: candidateName || existingSession.candidateName || "Candidate",
-        status: status || "pending",
-        notes: notes !== undefined ? notes : null,
-        reviewerId,
-        reviewedBy,
-      },
-      update: {
-        status: status !== undefined ? status : undefined,
-        notes: notes !== undefined ? notes : undefined,
-        candidateName: candidateName || undefined,
-        reviewerId,
-        reviewedBy,
-      },
+      return {
+        sessionId: dbReview.sessionId,
+        candidateName: dbReview.candidateName,
+        status: dbReview.status as ShortlistStatus,
+        updatedAt: dbReview.updatedAt.toISOString(),
+        notes: dbReview.notes || undefined,
+        reviewedBy: dbReview.reviewedBy || undefined,
+      };
     });
-
-    return {
-      sessionId: dbReview.sessionId,
-      candidateName: dbReview.candidateName,
-      status: dbReview.status as ShortlistStatus,
-      updatedAt: dbReview.updatedAt.toISOString(),
-      notes: dbReview.notes || undefined,
-      reviewedBy: dbReview.reviewedBy || undefined,
-    };
-  });
+  } catch (err) {
+    console.warn("Prisma persistRecruiterReview skipped (using in-memory fallback):", err);
+    return fallbackRecord;
+  }
 }
 
 /**
@@ -697,38 +776,52 @@ export async function persistRecruiterReview(
 export async function getRecruiterReview(
   sessionId: string
 ): Promise<CandidateShortlistRecord | null> {
-  const review = await prisma.recruiterReview.findUnique({
-    where: { sessionId },
-  });
+  try {
+    const review = await prisma.recruiterReview.findUnique({
+      where: { sessionId },
+    });
 
-  if (!review) return null;
+    if (review) {
+      return {
+        sessionId: review.sessionId,
+        candidateName: review.candidateName,
+        status: review.status as ShortlistStatus,
+        updatedAt: review.updatedAt.toISOString(),
+        notes: review.notes || undefined,
+        reviewedBy: review.reviewedBy || undefined,
+      };
+    }
+  } catch (err) {
+    console.warn("Prisma getRecruiterReview error:", err);
+  }
 
-  return {
-    sessionId: review.sessionId,
-    candidateName: review.candidateName,
-    status: review.status as ShortlistStatus,
-    updatedAt: review.updatedAt.toISOString(),
-    notes: review.notes || undefined,
-    reviewedBy: review.reviewedBy || undefined,
-  };
+  return IN_MEMORY_REVIEWS.get(sessionId) || null;
 }
 
 /**
  * Retrieve all RecruiterReviews ordered by last update
  */
 export async function getAllRecruiterReviews(): Promise<CandidateShortlistRecord[]> {
-  const reviews = await prisma.recruiterReview.findMany({
-    orderBy: { updatedAt: "desc" },
-  });
+  try {
+    const reviews = await prisma.recruiterReview.findMany({
+      orderBy: { updatedAt: "desc" },
+    });
 
-  return reviews.map((r) => ({
-    sessionId: r.sessionId,
-    candidateName: r.candidateName,
-    status: r.status as ShortlistStatus,
-    updatedAt: r.updatedAt.toISOString(),
-    notes: r.notes || undefined,
-    reviewedBy: r.reviewedBy || undefined,
-  }));
+    if (reviews && reviews.length > 0) {
+      return reviews.map((r) => ({
+        sessionId: r.sessionId,
+        candidateName: r.candidateName,
+        status: r.status as ShortlistStatus,
+        updatedAt: r.updatedAt.toISOString(),
+        notes: r.notes || undefined,
+        reviewedBy: r.reviewedBy || undefined,
+      }));
+    }
+  } catch (err) {
+    console.warn("Prisma getAllRecruiterReviews error (falling back to memory):", err);
+  }
+
+  return Array.from(IN_MEMORY_REVIEWS.values());
 }
 
 /**

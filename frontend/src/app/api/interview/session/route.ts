@@ -38,15 +38,17 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Missing session ID" }, { status: 400 });
     }
 
-    const session = await prisma.interviewSession.findUnique({
-      where: { id },
-      include: {
-        answers: true,
-        integrityEvents: {
-          orderBy: { createdAt: "asc" },
+    const session = await prisma.interviewSession
+      .findUnique({
+        where: { id },
+        include: {
+          answers: true,
+          integrityEvents: {
+            orderBy: { createdAt: "asc" },
+          },
         },
-      },
-    });
+      })
+      .catch(() => null);
 
     if (!session) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });

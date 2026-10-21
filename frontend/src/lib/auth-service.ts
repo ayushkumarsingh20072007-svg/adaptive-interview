@@ -141,10 +141,84 @@ export function toSafeUser(user: {
   };
 }
 
-// User operations backed by Prisma SQLite
-export async function findUserByEmail(email: string): Promise<StoredUser | null> {
+// Memory store for non-persisted / serverless registered users
+const IN_MEMORY_USERS = new Map<string, StoredUser>();
+
+// Secret key for HMAC token signing (falls back to a default consistent key for stateless verification)
+const SESSION_SIGNING_SECRET =
+  process.env.SESSION_SECRET ||
+  process.env.GEMINI_API_KEY ||
+  "interviewiq_serverless_jwt_auth_secret_2026_key";
+
+interface SessionPayload {
+  userId: string;
+  name: string;
+  email: string;
+  role: "candidate" | "recruiter";
+  companyName?: string;
+  title?: string;
+  createdAt: string;
+  expiresAt: number;
+}
+
+function signSessionToken(payload: SessionPayload): string {
+  const json = JSON.stringify(payload);
+  const encodedPayload = Buffer.from(json, "utf8").toString("base64url");
+  const signature = crypto
+    .createHmac("sha256", SESSION_SIGNING_SECRET)
+    .update(encodedPayload)
+    .digest("base64url");
+  return `iq_${encodedPayload}.${signature}`;
+}
+
+function verifySessionToken(token: string): SessionPayload | null {
+  if (!token || !token.startsWith("iq_")) return null;
+  const raw = token.slice(3);
+  const parts = raw.split(".");
+  if (parts.length !== 2) return null;
+  const [encodedPayload, signature] = parts;
+
   try {
-    const normalized = email.trim().toLowerCase();
+    const expectedSig = crypto
+      .createHmac("sha256", SESSION_SIGNING_SECRET)
+      .update(encodedPayload)
+      .digest("base64url");
+
+    const bufA = Buffer.from(signature);
+    const bufB = Buffer.from(expectedSig);
+    if (bufA.length !== bufB.length || !crypto.timingSafeEqual(bufA, bufB)) {
+      return null;
+    }
+
+    const payload = JSON.parse(
+      Buffer.from(encodedPayload, "base64url").toString("utf8")
+    ) as SessionPayload;
+
+    if (payload.expiresAt <= Date.now()) {
+      return null;
+    }
+
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+// User operations backed by Prisma SQLite with demo and in-memory fallbacks
+export async function findUserByEmail(email: string): Promise<StoredUser | null> {
+  const normalized = email.trim().toLowerCase();
+
+  // 1. Check demo users first
+  const demo = DEMO_USERS.find((u) => u.email.toLowerCase() === normalized);
+  if (demo) return demo;
+
+  // 2. Check in-memory registered users
+  for (const user of IN_MEMORY_USERS.values()) {
+    if (user.email.toLowerCase() === normalized) return user;
+  }
+
+  // 3. Check Prisma database if available
+  try {
     const user = await prisma.user.findUnique({
       where: { email: normalized },
     });
@@ -161,12 +235,21 @@ export async function findUserByEmail(email: string): Promise<StoredUser | null>
       createdAt: user.createdAt.toISOString(),
     };
   } catch (err) {
-    console.error("Database findUserByEmail error:", err);
+    console.warn("Database findUserByEmail error (using fallback):", err);
     return null;
   }
 }
 
 export async function findUserById(id: string): Promise<StoredUser | null> {
+  // 1. Check demo users first
+  const demo = DEMO_USERS.find((u) => u.id === id);
+  if (demo) return demo;
+
+  // 2. Check in-memory registered users
+  const inMemory = IN_MEMORY_USERS.get(id);
+  if (inMemory) return inMemory;
+
+  // 3. Check Prisma database if available
   try {
     const user = await prisma.user.findUnique({
       where: { id },
@@ -184,7 +267,7 @@ export async function findUserById(id: string): Promise<StoredUser | null> {
       createdAt: user.createdAt.toISOString(),
     };
   } catch (err) {
-    console.error("Database findUserById error:", err);
+    console.warn("Database findUserById error (using fallback):", err);
     return null;
   }
 }
@@ -217,24 +300,39 @@ export async function registerUser(
     return { error: "Password must include at least one letter and one number." };
   }
 
+  // Check demo or memory user duplicates
+  const existing = await findUserByEmail(cleanEmail);
+  if (existing) {
+    return { error: "An account with this email address already exists." };
+  }
+
+  const salt = generateSalt();
+  const hash = hashPassword(password, salt);
+  const userId = `usr_${crypto.randomUUID()}`;
+  const now = new Date();
+
+  const newStoredUser: StoredUser = {
+    id: userId,
+    name: cleanName,
+    email: cleanEmail,
+    role,
+    companyName: role === "recruiter" ? (companyName?.trim() || "TechCorp Global") : undefined,
+    passwordHash: hash,
+    passwordSalt: salt,
+    createdAt: now.toISOString(),
+  };
+
+  // Always register in memory for serverless resilience
+  IN_MEMORY_USERS.set(userId, newStoredUser);
+
   try {
-    const existing = await prisma.user.findUnique({
-      where: { email: cleanEmail },
-    });
-    if (existing) {
-      return { error: "An account with this email address already exists." };
-    }
-
-    const salt = generateSalt();
-    const hash = hashPassword(password, salt);
-
     const newUser = await prisma.user.create({
       data: {
-        id: `usr_${crypto.randomUUID()}`,
+        id: userId,
         name: cleanName,
         email: cleanEmail,
         role,
-        companyName: role === "recruiter" ? (companyName?.trim() || "TechCorp Global") : null,
+        companyName: newStoredUser.companyName || null,
         passwordHash: hash,
         passwordSalt: salt,
       },
@@ -242,11 +340,11 @@ export async function registerUser(
 
     return { user: toSafeUser(newUser) };
   } catch (err: unknown) {
-    if (typeof err === "object" && err !== null && "code" in err && err.code === "P2002") {
+    if (typeof err === "object" && err !== null && "code" in err && (err as { code: string }).code === "P2002") {
       return { error: "An account with this email address already exists." };
     }
-    console.error("Database registration error:", err);
-    return { error: "A database error occurred during registration." };
+    console.warn("Database registration fallback to in-memory:", err);
+    return { user: toSafeUser(newStoredUser) };
   }
 }
 
@@ -259,51 +357,85 @@ export async function verifyCredentials(
     return { error: "Email and password are required." };
   }
 
-  try {
-    const user = await prisma.user.findUnique({
-      where: { email: cleanEmail },
-    });
-    if (!user) {
-      return { error: "Invalid email or password." };
-    }
-
-    const computedHash = hashPassword(password, user.passwordSalt);
-
-    // Timing safe buffer comparison to prevent timing attacks
-    const bufA = Buffer.from(computedHash, "hex");
-    const bufB = Buffer.from(user.passwordHash, "hex");
-
-    if (bufA.length !== bufB.length || !crypto.timingSafeEqual(bufA, bufB)) {
-      return { error: "Invalid email or password." };
-    }
-
-    return { user: toSafeUser(user) };
-  } catch (err) {
-    console.error("Database verifyCredentials error:", err);
-    return { error: "A database error occurred during authentication." };
+  const user = await findUserByEmail(cleanEmail);
+  if (!user) {
+    return { error: "Invalid email or password." };
   }
+
+  const computedHash = hashPassword(password, user.passwordSalt);
+
+  // Timing safe buffer comparison to prevent timing attacks
+  const bufA = Buffer.from(computedHash, "hex");
+  const bufB = Buffer.from(user.passwordHash, "hex");
+
+  if (bufA.length !== bufB.length || !crypto.timingSafeEqual(bufA, bufB)) {
+    return { error: "Invalid email or password." };
+  }
+
+  return { user: toSafeUser(user) };
 }
 
-// Session operations backed by Prisma SQLite
+// Session operations backed by Signed Stateless Tokens + Prisma SQLite
 export async function createSession(userId: string): Promise<StoredSession> {
-  const token = generateToken();
   const now = Date.now();
   const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-  const expiresAt = new Date(now + sevenDaysMs);
+  const expiresAt = now + sevenDaysMs;
 
-  const session = await prisma.authSession.create({
-    data: {
-      token,
-      userId,
-      expiresAt,
-    },
-  });
+  // Resolve user info for self-contained stateless session
+  const user = (await findUserById(userId)) || DEMO_USERS.find((u) => u.id === userId);
+
+  const payload: SessionPayload = {
+    userId,
+    name: user?.name || "Demo User",
+    email: user?.email || "demo@interviewiq.ai",
+    role: user?.role || "candidate",
+    companyName: user?.companyName,
+    title: user?.title,
+    createdAt: user?.createdAt || new Date(now).toISOString(),
+    expiresAt,
+  };
+
+  const token = signSessionToken(payload);
+
+  // Optionally persist session in Prisma SQLite if database is reachable
+  try {
+    if (user) {
+      await prisma.user
+        .upsert({
+          where: { id: user.id },
+          update: {},
+          create: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            companyName: user.companyName ?? null,
+            title: user.title ?? null,
+            passwordHash: user.passwordHash || "demo",
+            passwordSalt: user.passwordSalt || "demo",
+          },
+        })
+        .catch(() => null);
+    }
+
+    await prisma.authSession
+      .create({
+        data: {
+          token,
+          userId,
+          expiresAt: new Date(expiresAt),
+        },
+      })
+      .catch(() => null);
+  } catch (err) {
+    console.warn("Prisma session persistence skipped (using signed token):", err);
+  }
 
   return {
-    token: session.token,
-    userId: session.userId,
-    expiresAt: session.expiresAt.getTime(),
-    createdAt: session.createdAt.toISOString(),
+    token,
+    userId,
+    expiresAt,
+    createdAt: new Date(now).toISOString(),
   };
 }
 
@@ -312,6 +444,31 @@ export async function getSession(
 ): Promise<(StoredSession & { user: SafeUser }) | null> {
   if (!token) return null;
 
+  // 1. Verify signed stateless token (works without database on serverless/Vercel)
+  const payload = verifySessionToken(token);
+  if (payload) {
+    const user = (await findUserById(payload.userId)) || {
+      id: payload.userId,
+      name: payload.name,
+      email: payload.email,
+      role: payload.role,
+      companyName: payload.companyName,
+      title: payload.title,
+      passwordHash: "",
+      passwordSalt: "",
+      createdAt: payload.createdAt,
+    };
+
+    return {
+      token,
+      userId: payload.userId,
+      expiresAt: payload.expiresAt,
+      createdAt: payload.createdAt,
+      user: toSafeUser(user),
+    };
+  }
+
+  // 2. Fallback to Prisma database lookup (for legacy sessions or non-signed tokens)
   try {
     const session = await prisma.authSession.findUnique({
       where: { token },
@@ -340,7 +497,7 @@ export async function getSession(
       user: toSafeUser(session.user),
     };
   } catch (err) {
-    console.error("Database getSession error:", err);
+    console.warn("Database getSession error:", err);
     return null;
   }
 }
@@ -352,6 +509,7 @@ export async function deleteSession(token: string): Promise<void> {
       where: { token },
     });
   } catch (err) {
-    console.error("Database deleteSession error:", err);
+    console.warn("Database deleteSession error:", err);
   }
 }
+

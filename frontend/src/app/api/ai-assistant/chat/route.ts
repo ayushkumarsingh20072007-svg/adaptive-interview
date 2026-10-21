@@ -50,7 +50,9 @@ export async function POST(req: NextRequest) {
       // Check if this is an explicitly supported demo interview session
       const isDemoSession = sessionId.startsWith('demo-session');
 
-      const session = await prisma.interviewSession.findUnique({ where: { id: sessionId } });
+      const session = await prisma.interviewSession
+        .findUnique({ where: { id: sessionId } })
+        .catch(() => null);
 
       if (!session) {
         // Fail closed if session cannot be found in database (unless it's an isolated demo benchmark)

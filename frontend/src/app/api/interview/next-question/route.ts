@@ -20,10 +20,12 @@ export async function POST(req: NextRequest) {
 
     // 1. Authoritative session validation & ownership check
     if (sessionId) {
-      const session = await prisma.interviewSession.findUnique({
-        where: { id: sessionId },
-        include: { answers: true },
-      });
+      const session = await prisma.interviewSession
+        .findUnique({
+          where: { id: sessionId },
+          include: { answers: true },
+        })
+        .catch(() => null);
       if (session) {
         if (session.userId && auth.authenticated && auth.user && auth.user.id !== session.userId) {
           return NextResponse.json(

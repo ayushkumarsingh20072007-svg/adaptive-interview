@@ -58,7 +58,9 @@ export async function GET(req: NextRequest, { params }: Props) {
       // No EvaluationReport row yet — but the session may be private.
       // Check session-level ownership to avoid leaking private session existence
       // and ensure unauthorized callers get 403, not 404.
-      const session = await prisma.interviewSession.findUnique({ where: { id } });
+      const session = await prisma.interviewSession
+        .findUnique({ where: { id } })
+        .catch(() => null);
       if (session && session.userId && session.userId !== "guest") {
         const authorized =
           isRecruiter || (auth.authenticated && auth.user && auth.user.id === session.userId);

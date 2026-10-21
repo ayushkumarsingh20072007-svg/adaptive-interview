@@ -34,13 +34,15 @@ export async function POST(req: NextRequest) {
     effectiveUserId = auth.authenticated && auth.user ? auth.user.id : undefined;
 
     // 1. Fetch authoritative session record from SQLite first
-    const existingDbSession = await prisma.interviewSession.findUnique({
-      where: { id: session.id },
-      include: {
-        answers: true,
-        integrityEvents: { orderBy: { createdAt: "asc" } },
-      },
-    });
+    const existingDbSession = await prisma.interviewSession
+      .findUnique({
+        where: { id: session.id },
+        include: {
+          answers: true,
+          integrityEvents: { orderBy: { createdAt: "asc" } },
+        },
+      })
+      .catch(() => null);
 
     // Enforce authorization for private candidate sessions
     if (existingDbSession && existingDbSession.userId && existingDbSession.userId !== "guest") {
@@ -58,18 +60,20 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Idempotency Policy: Check if a report already exists for this session
-    const existingReport = await prisma.evaluationReport.findUnique({
-      where: { sessionId: session.id },
-      include: {
-        session: {
-          include: {
-            answers: true,
-            review: true,
-            integrityEvents: { orderBy: { createdAt: "asc" } },
+    const existingReport = await prisma.evaluationReport
+      .findUnique({
+        where: { sessionId: session.id },
+        include: {
+          session: {
+            include: {
+              answers: true,
+              review: true,
+              integrityEvents: { orderBy: { createdAt: "asc" } },
+            },
           },
         },
-      },
-    });
+      })
+      .catch(() => null);
 
     if (existingReport && !forceRegenerate) {
       // Safely return existing report without duplicate AI calls or overwrites
@@ -97,14 +101,16 @@ export async function POST(req: NextRequest) {
 
     // If incoming session is completed but DB session is still in-progress, sync completion to DB
     if (existingDbSession && existingDbSession.status === "in-progress" && session.status === "completed") {
-      await prisma.interviewSession.update({
-        where: { id: session.id },
-        data: {
-          status: "completed",
-          endedAt: session.endedAt || new Date().toISOString(),
-          durationSeconds: session.durationSeconds || existingDbSession.durationSeconds,
-        },
-      });
+      await prisma.interviewSession
+        .update({
+          where: { id: session.id },
+          data: {
+            status: "completed",
+            endedAt: session.endedAt || new Date().toISOString(),
+            durationSeconds: session.durationSeconds || existingDbSession.durationSeconds,
+          },
+        })
+        .catch(() => null);
       existingDbSession.status = "completed";
     }
 
