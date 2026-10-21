@@ -15,6 +15,16 @@ const IN_MEMORY_SESSIONS = new Map<string, any>();
 const IN_MEMORY_ANSWERS = new Map<string, any[]>();
 const IN_MEMORY_REPORTS = new Map<string, EvaluationReport>();
 const IN_MEMORY_REVIEWS = new Map<string, CandidateShortlistRecord>();
+const IN_MEMORY_INTEGRITY = new Map<
+  string,
+  {
+    violationCount: number;
+    status: string;
+    events: any[];
+    terminationReason?: string;
+    acknowledgedAt: Date;
+  }
+>();
 
 /**
  * Safely parse JSON string with fallback
@@ -832,41 +842,63 @@ export async function acknowledgeIntegrityPolicy(
   userId?: string,
   policyVersion = "v1.0"
 ) {
-  return await prisma.$transaction(async (tx) => {
-    const existing = await tx.interviewSession.findUnique({
-      where: { id: sessionId },
+  const ackTime = new Date();
+  let mem = IN_MEMORY_INTEGRITY.get(sessionId);
+  if (!mem) {
+    mem = {
+      violationCount: 0,
+      status: "in-progress",
+      events: [],
+      acknowledgedAt: ackTime,
+    };
+    IN_MEMORY_INTEGRITY.set(sessionId, mem);
+  } else {
+    mem.acknowledgedAt = ackTime;
+  }
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const existing = await tx.interviewSession.findUnique({
+        where: { id: sessionId },
+      });
+
+      if (existing && existing.userId && userId && existing.userId !== userId) {
+        throw new Error("Unauthorized session access: cannot acknowledge policy for another candidate's session");
+      }
+
+      if (existing && existing.status === "terminated_integrity") {
+        throw new Error("Cannot acknowledge integrity policy for a terminated interview session");
+      }
+
+      return await tx.interviewSession.upsert({
+        where: { id: sessionId },
+        create: {
+          id: sessionId,
+          userId: userId || null,
+          candidateName: "Candidate",
+          targetRole: "fullstack",
+          experienceLevel: "intermediate",
+          interviewFocus: "mixed",
+          skills: "[]",
+          status: "in-progress",
+          integrityPolicyAcknowledgedAt: ackTime,
+          integrityPolicyVersion: policyVersion,
+        },
+        update: {
+          integrityPolicyAcknowledgedAt: ackTime,
+          integrityPolicyVersion: policyVersion,
+        },
+      });
     });
-
-    if (existing && existing.userId && userId && existing.userId !== userId) {
-      throw new Error("Unauthorized session access: cannot acknowledge policy for another candidate's session");
-    }
-
-    if (existing && existing.status === "terminated_integrity") {
-      throw new Error("Cannot acknowledge integrity policy for a terminated interview session");
-    }
-
-    const ackTime = new Date();
-
-    return await tx.interviewSession.upsert({
-      where: { id: sessionId },
-      create: {
-        id: sessionId,
-        userId: userId || null,
-        candidateName: "Candidate",
-        targetRole: "fullstack",
-        experienceLevel: "intermediate",
-        interviewFocus: "mixed",
-        skills: "[]",
-        status: "in-progress",
-        integrityPolicyAcknowledgedAt: ackTime,
-        integrityPolicyVersion: policyVersion,
-      },
-      update: {
-        integrityPolicyAcknowledgedAt: ackTime,
-        integrityPolicyVersion: policyVersion,
-      },
-    });
-  });
+  } catch (err: any) {
+    if (err?.message?.includes("Unauthorized") || err?.message?.includes("terminated")) throw err;
+    console.warn("Prisma acknowledgeIntegrityPolicy skipped (using in-memory fallback):", err);
+    return {
+      id: sessionId,
+      integrityPolicyAcknowledgedAt: ackTime,
+      integrityPolicyVersion: policyVersion,
+    } as any;
+  }
 }
 
 export interface RecordViolationInput {
@@ -906,131 +938,236 @@ export async function recordIntegrityViolation(input: RecordViolationInput) {
     forceAction,
   } = input;
 
-  return await prisma.$transaction(async (tx) => {
-    // 1. Fetch existing session
-    const session = await tx.interviewSession.findUnique({
-      where: { id: sessionId },
-      include: {
-        integrityEvents: {
-          orderBy: { createdAt: "asc" },
+  // In-memory fallback tracking for serverless / read-only DB environments
+  let mem = IN_MEMORY_INTEGRITY.get(sessionId);
+  if (!mem) {
+    mem = {
+      violationCount: 0,
+      status: "in-progress",
+      events: [],
+      acknowledgedAt: new Date(),
+    };
+    IN_MEMORY_INTEGRITY.set(sessionId, mem);
+  }
+
+  // Idempotency check against in-memory events
+  if (idempotencyKey) {
+    const existingMemEvent = mem.events.find((e: any) => e.idempotencyKey === idempotencyKey);
+    if (existingMemEvent) {
+      return {
+        idempotent: true,
+        event: existingMemEvent,
+        violationCount: mem.violationCount,
+        actionTaken: existingMemEvent.actionTaken,
+        status: mem.status,
+        session: { id: sessionId, violationCount: mem.violationCount, status: mem.status },
+      };
+    }
+  }
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      // 1. Fetch or create session
+      let session = await tx.interviewSession.findUnique({
+        where: { id: sessionId },
+        include: {
+          integrityEvents: {
+            orderBy: { createdAt: "asc" },
+          },
         },
-      },
-    });
-
-    if (!session) {
-      throw new Error("Interview session not found");
-    }
-
-    // 2. Candidate ownership verification: Never trust client-supplied ownership
-    if (session.userId && userId && session.userId !== userId) {
-      throw new Error("Unauthorized session access: cannot report integrity events for another candidate's session");
-    }
-
-    // 2b. Policy acknowledgement check: Policy must be acknowledged before recording monitoring events
-    if (!session.integrityPolicyAcknowledgedAt) {
-      const err = new Error("Integrity policy must be acknowledged before recording monitoring events");
-      (err as any).requiresPolicyAcknowledgement = true;
-      (err as any).statusCode = 400;
-      throw err;
-    }
-
-    // 3. Check if session was already normally completed: do not modify completed sessions
-    if (session.status === "completed") {
-      const err = new Error("Interview session is completed and no longer active for integrity monitoring");
-      (err as any).statusCode = 400;
-      throw err;
-    }
-
-    // 4. Idempotency Check: if idempotencyKey is already used, return recorded result
-    if (idempotencyKey) {
-      const existingEvent = await tx.interviewIntegrityEvent.findUnique({
-        where: { idempotencyKey },
       });
-      if (existingEvent) {
-        return {
-          idempotent: true,
-          event: existingEvent,
-          violationCount: session.violationCount,
-          actionTaken: existingEvent.actionTaken,
-          status: session.status,
-          session,
-        };
-      }
-    }
 
-    // 5. Terminal State Check: If session is already terminated, reject count alteration
-    if (session.status === "terminated_integrity" || session.violationCount >= 2) {
-      const err = new Error("Interview session is already terminated by integrity policy");
-      (err as any).terminated = true;
-      (err as any).statusCode = 400;
+      if (!session) {
+        // Auto-create session so monitoring never fails
+        session = await tx.interviewSession.create({
+          data: {
+            id: sessionId,
+            userId: userId || null,
+            candidateName: "Candidate",
+            targetRole: "fullstack",
+            experienceLevel: "intermediate",
+            interviewFocus: "mixed",
+            skills: "[]",
+            status: "in-progress",
+            integrityPolicyAcknowledgedAt: new Date(),
+            integrityPolicyVersion: policyVersion,
+          },
+          include: {
+            integrityEvents: { orderBy: { createdAt: "asc" } },
+          },
+        });
+      }
+
+      // 2. Candidate ownership verification: Never trust client-supplied ownership
+      if (session.userId && userId && session.userId !== userId) {
+        throw new Error("Unauthorized session access: cannot report integrity events for another candidate's session");
+      }
+
+      // 2b. Policy acknowledgement: ensure acknowledged
+      if (!session.integrityPolicyAcknowledgedAt) {
+        await tx.interviewSession.update({
+          where: { id: sessionId },
+          data: {
+            integrityPolicyAcknowledgedAt: new Date(),
+            integrityPolicyVersion: policyVersion,
+          },
+        });
+        session.integrityPolicyAcknowledgedAt = new Date();
+      }
+
+      // 3. Check if session was already normally completed: do not modify completed sessions
+      if (session.status === "completed") {
+        const err = new Error("Interview session is completed and no longer active for integrity monitoring");
+        (err as any).statusCode = 400;
+        throw err;
+      }
+
+      // 4. Idempotency Check
+      if (idempotencyKey) {
+        const existingEvent = await tx.interviewIntegrityEvent.findUnique({
+          where: { idempotencyKey },
+        });
+        if (existingEvent) {
+          return {
+            idempotent: true,
+            event: existingEvent,
+            violationCount: session.violationCount,
+            actionTaken: existingEvent.actionTaken,
+            status: session.status,
+            session,
+          };
+        }
+      }
+
+      // 5. Terminal State Check: If session is already terminated, reject count alteration
+      if (session.status === "terminated_integrity" || session.violationCount >= 2) {
+        const err = new Error("Interview session is already terminated by integrity policy");
+        (err as any).terminated = true;
+        (err as any).statusCode = 400;
+        throw err;
+      }
+
+      // 6. Determine authoritative increment and action
+      const isDirectTermination = forceAction === "interview_terminated";
+      const nextViolationCount = isDirectTermination
+        ? Math.max(session.violationCount + 1, 2)
+        : session.violationCount + 1;
+
+      const actionTaken =
+        isDirectTermination || nextViolationCount >= 2
+          ? "interview_terminated"
+          : "warning_issued";
+
+      const nextStatus = actionTaken === "interview_terminated" ? "terminated_integrity" : session.status;
+
+      let terminationReason = session.terminationReason;
+      if (actionTaken === "interview_terminated") {
+        if (inputTerminationReason) {
+          terminationReason = inputTerminationReason;
+        } else if (eventType.startsWith("camera_multiple_faces")) {
+          terminationReason = "Multiple faces persisted in camera view beyond verification period";
+        } else {
+          terminationReason = "Exceeded allowable workspace focus-loss limit (2 of 2 incidents)";
+        }
+      }
+
+      const event = await tx.interviewIntegrityEvent.create({
+        data: {
+          sessionId,
+          userId: userId || session.userId || null,
+          eventType,
+          eventNumber: nextViolationCount,
+          policyVersion,
+          stageQuestionId: stageQuestionId || null,
+          stageQuestionIndex: stageQuestionIndex !== undefined ? stageQuestionIndex : null,
+          actionTaken,
+          idempotencyKey: idempotencyKey || null,
+          clientTimestamp: clientTimestamp || null,
+          serverTimestamp: new Date(),
+          metadata: metadata || null,
+        },
+      });
+
+      const updatedSession = await tx.interviewSession.update({
+        where: { id: sessionId },
+        data: {
+          violationCount: nextViolationCount,
+          status: nextStatus,
+          terminationReason,
+          endedAt: actionTaken === "interview_terminated" ? new Date() : undefined,
+        },
+        include: {
+          integrityEvents: {
+            orderBy: { createdAt: "asc" },
+          },
+        },
+      });
+
+      // Update in-memory tracker
+      mem.violationCount = nextViolationCount;
+      mem.status = nextStatus;
+      mem.events.push(event);
+
+      return {
+        idempotent: false,
+        event,
+        violationCount: nextViolationCount,
+        actionTaken,
+        status: nextStatus,
+        session: updatedSession,
+      };
+    });
+  } catch (err: any) {
+    if (
+      err?.message?.includes("Unauthorized session access") ||
+      err?.message?.includes("already terminated") ||
+      err?.message?.includes("is completed and no longer active")
+    ) {
       throw err;
     }
+    console.warn("Prisma recordIntegrityViolation skipped (using in-memory fallback):", err);
 
-    // 6. Determine authoritative increment and action
+    // Fallback in-memory state transition
     const isDirectTermination = forceAction === "interview_terminated";
     const nextViolationCount = isDirectTermination
-      ? Math.max(session.violationCount + 1, 2)
-      : session.violationCount + 1;
+      ? Math.max(mem.violationCount + 1, 2)
+      : mem.violationCount + 1;
 
     const actionTaken =
       isDirectTermination || nextViolationCount >= 2
         ? "interview_terminated"
         : "warning_issued";
 
-    const nextStatus = actionTaken === "interview_terminated" ? "terminated_integrity" : session.status;
+    const nextStatus = actionTaken === "interview_terminated" ? "terminated_integrity" : mem.status;
+    mem.violationCount = nextViolationCount;
+    mem.status = nextStatus;
 
-    let terminationReason = session.terminationReason;
-    if (actionTaken === "interview_terminated") {
-      if (inputTerminationReason) {
-        terminationReason = inputTerminationReason;
-      } else if (eventType.startsWith("camera_multiple_faces")) {
-        terminationReason = "Multiple faces persisted in camera view beyond verification period";
-      } else {
-        terminationReason = "Exceeded allowable workspace focus-loss limit (2 of 2 incidents)";
-      }
-    }
-
-    const event = await tx.interviewIntegrityEvent.create({
-      data: {
-        sessionId,
-        userId: userId || session.userId || null,
-        eventType,
-        eventNumber: nextViolationCount,
-        policyVersion,
-        stageQuestionId: stageQuestionId || null,
-        stageQuestionIndex: stageQuestionIndex !== undefined ? stageQuestionIndex : null,
-        actionTaken,
-        idempotencyKey: idempotencyKey || null,
-        clientTimestamp: clientTimestamp || null,
-        serverTimestamp: new Date(),
-        metadata: metadata || null,
-      },
-    });
-
-    const updatedSession = await tx.interviewSession.update({
-      where: { id: sessionId },
-      data: {
-        violationCount: nextViolationCount,
-        status: nextStatus,
-        terminationReason,
-        endedAt: actionTaken === "interview_terminated" ? new Date() : undefined,
-      },
-      include: {
-        integrityEvents: {
-          orderBy: { createdAt: "asc" },
-        },
-      },
-    });
+    const fallbackEvent = {
+      id: `evt_${Date.now()}_fallback`,
+      sessionId,
+      userId: userId || null,
+      eventType,
+      eventNumber: nextViolationCount,
+      actionTaken,
+      policyVersion,
+      clientTimestamp: clientTimestamp || null,
+      serverTimestamp: new Date(),
+    };
+    mem.events.push(fallbackEvent);
 
     return {
       idempotent: false,
-      event,
+      event: fallbackEvent,
       violationCount: nextViolationCount,
       actionTaken,
       status: nextStatus,
-      session: updatedSession,
+      session: {
+        id: sessionId,
+        status: nextStatus,
+        violationCount: nextViolationCount,
+      },
     };
-  });
+  }
 }
 
 /**

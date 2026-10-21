@@ -369,7 +369,6 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
   // Focus-Loss Monitoring & Transition State Machine
   React.useEffect(() => {
     if (
-      !integrityAcknowledged ||
       isTerminatedByIntegrity ||
       session.status === "completed" ||
       session.status === "terminated_integrity"
@@ -385,6 +384,35 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
       }
       lastViolationTimeRef.current = now;
 
+      // 1. Immediate local reaction (Guarantees warning modal pops up immediately upon tab switch / window blur)
+      setViolationCount((prev) => {
+        const nextCount = prev + 1;
+        if (nextCount >= 2) {
+          setIsTerminatedByIntegrity(true);
+          setTerminationReason("Exceeded allowable workspace focus-loss limit (2 of 2 incidents)");
+          setShowWarningModal(false);
+          const terminatedSession = {
+            ...session,
+            status: "terminated_integrity" as const,
+            endedAt: new Date().toISOString(),
+            violationCount: nextCount,
+            terminationReason: "Exceeded allowable workspace focus-loss limit (2 of 2 incidents)",
+          };
+          setSession(terminatedSession);
+          saveStoredSession(terminatedSession);
+        } else {
+          setShowWarningModal(true);
+          const warnedSession = {
+            ...session,
+            violationCount: 1,
+          };
+          setSession(warnedSession);
+          saveStoredSession(warnedSession);
+        }
+        return nextCount;
+      });
+
+      // 2. Synchronize with server backend
       const eventNonce = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
       try {
@@ -462,8 +490,6 @@ export function InterviewWorkspace({ sessionId }: InterviewWorkspaceProps) {
       window.removeEventListener("focus", handleWindowFocus);
     };
   }, [
-    integrityAcknowledged,
-    isTerminatedByIntegrity,
     session.status,
     session.id,
     session.answers.length,
