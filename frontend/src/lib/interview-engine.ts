@@ -30,11 +30,13 @@ export function initializeInterviewSession(setup: CandidateSetup): InterviewSess
 }
 
 /**
- * Retrieves the starting question for a given role.
+ * Retrieves the starting question for a given role, prioritizing the candidate's selected experience level.
  */
 export function getInitialQuestion(setup: CandidateSetup): Question {
   const roleBank = QUESTION_BANK[setup.targetRole] || QUESTION_BANK.fullstack;
-  return roleBank[0];
+  const targetLevel = setup.experienceLevel || "intermediate";
+  const matchingQuestion = roleBank.find((q) => q.difficulty === targetLevel);
+  return matchingQuestion || roleBank[0];
 }
 
 /**
@@ -146,12 +148,18 @@ export function evaluateAnswer(question: Question, answerText: string): AnswerFe
   }
 
   // Adaptive note
-  const adaptiveNote =
-    finalScore >= 75
-      ? "Identified solid proficiency; advancing difficulty toward edge-cases and distributed scale."
+  const isBeginnerQ = question.difficulty === "beginner";
+  const adaptiveNote = isBeginnerQ
+    ? finalScore >= 75
+      ? "Demonstrated solid understanding of fundamental concepts; advancing to basic application and error handling."
       : finalScore >= 50
-      ? "Identified partial understanding; probing specific trade-offs and structural mechanics."
-      : "Low technical accuracy detected; shifting follow-up to core fundamental concepts.";
+      ? "Demonstrated partial understanding; probing core syntax, basic properties, and foundational usage."
+      : "Foundational conceptual gap detected; shifting follow-up to fundamental building blocks."
+    : finalScore >= 75
+    ? "Identified solid proficiency; advancing difficulty toward practical edge-cases and system trade-offs."
+    : finalScore >= 50
+    ? "Identified partial understanding; probing specific trade-offs and structural mechanics."
+    : "Low technical accuracy detected; shifting follow-up to core fundamental concepts.";
 
   // Extract verified verbatim evidence quote from candidate's actual answer text
   let evidenceQuote: string | null = null;
@@ -201,7 +209,8 @@ export function evaluateAnswer(question: Question, answerText: string): AnswerFe
 }
 
 /**
- * Deterministically branches to the next question based on answer analysis and role question bank.
+ * Deterministically branches to the next question based on answer analysis and role question bank,
+ * strictly calibrated to the candidate's chosen experience level.
  */
 export function getNextAdaptiveQuestion(
   currentQuestion: Question,
@@ -212,6 +221,7 @@ export function getNextAdaptiveQuestion(
   const answeredIds = new Set(session.answers.map((a) => a.questionId));
   answeredIds.add(currentQuestion.id);
 
+  const targetLevel = session.setup.experienceLevel || "intermediate";
   const normalized = candidateAnswer.toLowerCase();
 
   // 1. Check if an adaptive branch trigger is matched
@@ -222,21 +232,50 @@ export function getNextAdaptiveQuestion(
         if (matches) {
           const followUpQ = roleBank.find((q) => q.id === branch.followUpQuestionId);
           if (followUpQ && !answeredIds.has(followUpQ.id)) {
-            return followUpQ;
+            // Guardrail: A beginner candidate should never be jumped directly to an advanced question
+            if (targetLevel === "beginner" && followUpQ.difficulty === "advanced") {
+              // Skip this branch and continue
+            } else {
+              return followUpQ;
+            }
           }
         }
       }
     }
   }
 
-  // 2. Otherwise pick next available unasked question in the role bank
+  // 2. Pick next available unasked question matching the candidate's experience level
+  const sameLevelUnasked = roleBank.find((q) => !answeredIds.has(q.id) && q.difficulty === targetLevel);
+  if (sameLevelUnasked) {
+    return sameLevelUnasked;
+  }
+
+  // 3. If exact level is exhausted, select from adjacent difficulty without over-escalating
+  const fallbackOrdered =
+    targetLevel === "beginner"
+      ? roleBank.filter((q) => q.difficulty === "intermediate")
+      : targetLevel === "advanced"
+      ? roleBank.filter((q) => q.difficulty === "intermediate")
+      : roleBank.filter((q) => q.difficulty === "beginner" || q.difficulty === "advanced");
+
+  const nextClosest = fallbackOrdered.find((q) => !answeredIds.has(q.id));
+  if (nextClosest) {
+    return nextClosest;
+  }
+
+  // 4. Any remaining unasked question in the role bank
   const nextInBank = roleBank.find((q) => !answeredIds.has(q.id));
   if (nextInBank) {
     return nextInBank;
   }
 
-  // 3. Fallback: Check if there's an unasked question in fullstack if role questions exhausted
+  // 5. Cross-role fallback if role questions exhausted, matching level first
   const fallbackBank = QUESTION_BANK.fullstack;
+  const crossRoleMatch = fallbackBank.find((q) => !answeredIds.has(q.id) && q.difficulty === targetLevel);
+  if (crossRoleMatch) {
+    return crossRoleMatch;
+  }
+
   const fallbackQ = fallbackBank.find((q) => !answeredIds.has(q.id));
   return fallbackQ || null;
 }

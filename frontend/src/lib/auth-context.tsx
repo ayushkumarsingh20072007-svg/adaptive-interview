@@ -25,7 +25,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await fetch("/api/auth/me", {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-cache",
+          "Pragma": "no-cache",
+        },
       });
       if (res.ok) {
         const data = await res.json();
@@ -46,7 +51,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     fetch("/api/auth/me", {
       method: "GET",
-      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+      },
     })
       .then((res) => (res.ok ? res.json() : { user: null }))
       .then((data) => {

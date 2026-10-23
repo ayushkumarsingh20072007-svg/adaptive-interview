@@ -34,6 +34,43 @@ export const SAMPLE_CANDIDATE: CandidateSetup = {
 export const QUESTION_BANK: Record<TargetRole, Question[]> = {
   fullstack: [
     {
+      id: "fs-beg-1",
+      role: "fullstack",
+      category: "Web Fundamentals",
+      difficulty: "beginner",
+      questionText:
+        "In full-stack web development, what is the fundamental difference between a GET request and a POST request? When would you use each, and where does request data usually reside?",
+      hint: "Think about query parameters in URLs vs payload body, idempotency, caching, and sensitive data like passwords.",
+      expectedKeywords: ["get", "post", "body", "idempotent", "query", "url", "safe", "cache"],
+      followUpBranches: [
+        {
+          keywordTrigger: ["body", "payload", "query"],
+          followUpQuestionId: "fs-beg-2",
+          rationale: "Candidate understands HTTP methods; transition into how data flows into UI state.",
+        },
+      ],
+    },
+    {
+      id: "fs-beg-2",
+      role: "fullstack",
+      category: "Frontend & State",
+      difficulty: "beginner",
+      questionText:
+        "In React or modern frontend frameworks, explain the difference between 'props' and 'state'. When would a component need its own internal state versus receiving data via props?",
+      hint: "Consider mutability, which component owns the data, and what triggers a component re-render.",
+      expectedKeywords: ["props", "state", "immutable", "re-render", "parent", "child", "usestate"],
+    },
+    {
+      id: "fs-beg-3",
+      role: "fullstack",
+      category: "Database & CRUD",
+      difficulty: "beginner",
+      questionText:
+        "When connecting a backend API (like Express or Next.js) to a database, what are the four core CRUD operations and which HTTP methods typically map to each of them?",
+      hint: "Think about Create, Read, Update, Delete and how POST, GET, PUT/PATCH, and DELETE relate to them.",
+      expectedKeywords: ["create", "read", "update", "delete", "post", "get", "put", "patch"],
+    },
+    {
       id: "fs-1",
       role: "fullstack",
       category: "System Architecture",
@@ -83,6 +120,43 @@ export const QUESTION_BANK: Record<TargetRole, Question[]> = {
   ],
   frontend: [
     {
+      id: "fe-beg-1",
+      role: "frontend",
+      category: "React Fundamentals",
+      difficulty: "beginner",
+      questionText:
+        "Explain the fundamental difference between `useState` and `useEffect` in React. How do you ensure an effect only runs once when the component first mounts?",
+      hint: "Mention the dependency array, when state updates trigger renders, and cleanup functions.",
+      expectedKeywords: ["usestate", "useeffect", "dependency", "mount", "array", "render", "state"],
+      followUpBranches: [
+        {
+          keywordTrigger: ["dependency", "array", "mount"],
+          followUpQuestionId: "fe-beg-2",
+          rationale: "Candidate understands hook lifecycles; transition to layout and styling fundamentals.",
+        },
+      ],
+    },
+    {
+      id: "fe-beg-2",
+      role: "frontend",
+      category: "CSS & Layout",
+      difficulty: "beginner",
+      questionText:
+        "Explain the CSS Box Model. What are the four layers that make up an element's box model, and how does `box-sizing: border-box` affect the total width calculation?",
+      hint: "Name content, padding, border, and margin. Explain why border-box prevents elements from breaking layouts.",
+      expectedKeywords: ["content", "padding", "border", "margin", "box-sizing", "border-box", "width"],
+    },
+    {
+      id: "fe-beg-3",
+      role: "frontend",
+      category: "DOM & Events",
+      difficulty: "beginner",
+      questionText:
+        "What is event bubbling in JavaScript, and how can you stop an event from propagating up to parent elements in the DOM tree?",
+      hint: "Explain event propagation from the target element upwards, and the use of `event.stopPropagation()`.",
+      expectedKeywords: ["bubbling", "propagation", "stoppropagation", "event", "dom", "target", "parent"],
+    },
+    {
       id: "fe-1",
       role: "frontend",
       category: "Core React & State",
@@ -114,6 +188,43 @@ export const QUESTION_BANK: Record<TargetRole, Question[]> = {
     },
   ],
   backend: [
+    {
+      id: "be-beg-1",
+      role: "backend",
+      category: "Database Basics",
+      difficulty: "beginner",
+      questionText:
+        "Explain the basic difference between SQL (relational) and NoSQL (document-based) databases. For a simple user authentication and profile system, which would you pick and why?",
+      hint: "Compare structured tables with schemas, foreign keys, and ACID transactions vs flexible JSON documents.",
+      expectedKeywords: ["relational", "nosql", "schema", "table", "document", "sql", "foreign key", "acid"],
+      followUpBranches: [
+        {
+          keywordTrigger: ["table", "schema", "relational"],
+          followUpQuestionId: "be-beg-2",
+          rationale: "Candidate understands database basics; check API and HTTP status code foundations.",
+        },
+      ],
+    },
+    {
+      id: "be-beg-2",
+      role: "backend",
+      category: "HTTP & REST APIs",
+      difficulty: "beginner",
+      questionText:
+        "What are HTTP status codes 200, 400, 401, 403, 404, and 500? In an Express or REST API, when would you return a 401 Unauthorized versus a 403 Forbidden?",
+      hint: "Distinguish authentication (who you are / missing credentials) from authorization (what you are allowed to access).",
+      expectedKeywords: ["200", "400", "401", "403", "404", "500", "authentication", "authorization", "token"],
+    },
+    {
+      id: "be-beg-3",
+      role: "backend",
+      category: "Backend Middleware",
+      difficulty: "beginner",
+      questionText:
+        "What is middleware in a Node.js/Express backend application, and what happens if you forget to call `next()` or send a response inside a middleware function?",
+      hint: "Explain the request-response cycle, chaining functions, and why the client request would hang indefinitely.",
+      expectedKeywords: ["middleware", "request", "response", "next", "pipeline", "hang", "timeout", "cycle"],
+    },
     {
       id: "be-1",
       role: "backend",
@@ -147,6 +258,43 @@ export const QUESTION_BANK: Record<TargetRole, Question[]> = {
   ],
   python: [
     {
+      id: "py-beg-1",
+      role: "python",
+      category: "Python Basics",
+      difficulty: "beginner",
+      questionText:
+        "In Python, explain the difference between a List and a Tuple. When should you use a Tuple instead of a List, and can a Tuple be used as a dictionary key?",
+      hint: "Focus on mutability, memory efficiency, hashability, and protecting fixed collections of data.",
+      expectedKeywords: ["mutable", "immutable", "list", "tuple", "hashable", "key", "dictionary"],
+      followUpBranches: [
+        {
+          keywordTrigger: ["mutable", "immutable", "tuple"],
+          followUpQuestionId: "py-beg-2",
+          rationale: "Candidate knows Python collections; test error handling mechanics.",
+        },
+      ],
+    },
+    {
+      id: "py-beg-2",
+      role: "python",
+      category: "Error Handling",
+      difficulty: "beginner",
+      questionText:
+        "Explain how exception handling works in Python using `try`, `except`, `else`, and `finally`. Under what conditions does the code inside the `finally` block execute?",
+      hint: "Explain that `finally` runs unconditionally, typically used for cleanup such as closing file handles or database connections.",
+      expectedKeywords: ["try", "except", "finally", "exception", "cleanup", "execution", "error", "always"],
+    },
+    {
+      id: "py-beg-3",
+      role: "python",
+      category: "Python Syntax & Types",
+      difficulty: "beginner",
+      questionText:
+        "What is the difference between the `==` operator and the `is` operator in Python? Provide a simple example where `a == b` evaluates to True, but `a is b` evaluates to False.",
+      hint: "Differentiate value equality from memory identity (object reference in memory / id()).",
+      expectedKeywords: ["equality", "identity", "value", "memory", "id", "reference", "object"],
+    },
+    {
       id: "py-1",
       role: "python",
       category: "Python Internals",
@@ -169,6 +317,43 @@ export const QUESTION_BANK: Record<TargetRole, Question[]> = {
   ],
   java: [
     {
+      id: "jv-beg-1",
+      role: "java",
+      category: "Java OOP",
+      difficulty: "beginner",
+      questionText:
+        "Explain the four core principles of Object-Oriented Programming (OOP) in Java. Provide a brief real-world example illustrating Polymorphism (method overriding or overloading).",
+      hint: "Name Encapsulation, Inheritance, Polymorphism, and Abstraction. Give a simple example like Animal with makeDogSound vs makeCatSound.",
+      expectedKeywords: ["encapsulation", "inheritance", "polymorphism", "abstraction", "overriding", "overloading"],
+      followUpBranches: [
+        {
+          keywordTrigger: ["inheritance", "polymorphism", "class"],
+          followUpQuestionId: "jv-beg-2",
+          rationale: "Candidate knows OOP basics; test interface vs abstract class design.",
+        },
+      ],
+    },
+    {
+      id: "jv-beg-2",
+      role: "java",
+      category: "Interfaces & Classes",
+      difficulty: "beginner",
+      questionText:
+        "In Java, what is the difference between an `interface` and an `abstract class`? In what scenario would you choose an abstract class over an interface?",
+      hint: "Consider state (instance variables), multiple inheritance, constructor support, and default methods.",
+      expectedKeywords: ["interface", "abstract", "inheritance", "multiple", "constructor", "state", "implementation"],
+    },
+    {
+      id: "jv-beg-3",
+      role: "java",
+      category: "Java Basics",
+      difficulty: "beginner",
+      questionText:
+        "What is the difference between the `==` operator and the `.equals()` method when comparing Strings or Objects in Java? Why does `new String(\"hello\") == new String(\"hello\")` return false?",
+      hint: "Explain reference/address comparison on the heap vs logical content equality, and the String Pool.",
+      expectedKeywords: ["equals", "reference", "identity", "value", "heap", "string pool", "memory", "content"],
+    },
+    {
       id: "jv-1",
       role: "java",
       category: "JVM Internals & GC",
@@ -190,6 +375,43 @@ export const QUESTION_BANK: Record<TargetRole, Question[]> = {
     },
   ],
   "data-analyst": [
+    {
+      id: "da-beg-1",
+      role: "data-analyst",
+      category: "SQL Fundamentals",
+      difficulty: "beginner",
+      questionText:
+        "In SQL, explain the difference between the `WHERE` clause and the `HAVING` clause. Can you filter rows using an aggregate function like `COUNT()` inside a `WHERE` clause? Why or why not?",
+      hint: "Explain order of execution: WHERE filters individual rows before grouping, while HAVING filters aggregated groups after GROUP BY.",
+      expectedKeywords: ["where", "having", "group by", "aggregate", "filter", "count", "execution", "rows"],
+      followUpBranches: [
+        {
+          keywordTrigger: ["group by", "aggregate", "having"],
+          followUpQuestionId: "da-beg-2",
+          rationale: "Candidate grasps SQL filtering; probe table joins understanding.",
+        },
+      ],
+    },
+    {
+      id: "da-beg-2",
+      role: "data-analyst",
+      category: "SQL Joins",
+      difficulty: "beginner",
+      questionText:
+        "Explain the difference between an `INNER JOIN` and a `LEFT JOIN` in SQL using a practical example (such as a Customers table and an Orders table). What happens to customers who have placed zero orders?",
+      hint: "INNER JOIN returns only matching rows from both tables; LEFT JOIN keeps all rows from the left table and fills non-matching right columns with NULL.",
+      expectedKeywords: ["inner join", "left join", "null", "match", "rows", "table", "customers", "orders"],
+    },
+    {
+      id: "da-beg-3",
+      role: "data-analyst",
+      category: "Data Analysis Basics",
+      difficulty: "beginner",
+      questionText:
+        "In Python's Pandas library, what is the difference between a `Series` and a `DataFrame`? How would you identify and handle missing (null) values in a dataset?",
+      hint: "Mention 1D single-column vs 2D tabular data, and methods like `.isna()`, `.fillna()`, or `.dropna()`.",
+      expectedKeywords: ["series", "dataframe", "1d", "2d", "isna", "isnull", "fillna", "dropna", "missing"],
+    },
     {
       id: "da-1",
       role: "data-analyst",

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { deleteSession } from "@/lib/auth-service";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 function getSessionToken(request: Request): string | null {
   const cookieHeader = request.headers.get("cookie");
   if (!cookieHeader) return null;

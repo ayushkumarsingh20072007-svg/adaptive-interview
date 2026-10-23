@@ -47,9 +47,13 @@ export function useSpeechRecognition({
   const recognitionRef = React.useRef<IBrowserSpeechRecognition | null>(null);
   const isStartingRef = React.useRef<boolean>(false);
   const isStoppingRef = React.useRef<boolean>(false);
+  const isListeningIntendedRef = React.useRef<boolean>(false);
+  const interimTranscriptRef = React.useRef<string>("");
   const accumulatedFinalRef = React.useRef<string>("");
   const callbacksRef = React.useRef({ onTranscriptFinalized, onError });
   const currentStateRef = React.useRef<SpeechRecognitionState>("idle");
+  const restartTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+  const networkRetryCountRef = React.useRef<number>(0);
 
   const updateState = React.useCallback((nextState: SpeechRecognitionState) => {
     currentStateRef.current = nextState;
@@ -71,6 +75,10 @@ export function useSpeechRecognition({
 
   // Cleanup helper to abort and detach recognition
   const cleanupRecognition = React.useCallback(() => {
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
+    }
     if (recognitionRef.current) {
       try {
         recognitionRef.current.onstart = null;
@@ -90,6 +98,7 @@ export function useSpeechRecognition({
   // Teardown on unmount
   React.useEffect(() => {
     return () => {
+      isListeningIntendedRef.current = false;
       cleanupRecognition();
     };
   }, [cleanupRecognition]);
@@ -102,61 +111,18 @@ export function useSpeechRecognition({
   }, [updateState]);
 
   const reset = React.useCallback(() => {
+    isListeningIntendedRef.current = false;
     cleanupRecognition();
     setInterimTranscript("");
+    interimTranscriptRef.current = "";
     setFinalTranscript("");
     accumulatedFinalRef.current = "";
     setError(null);
     updateState(isSpeechRecognitionSupported() ? "idle" : "unsupported");
   }, [cleanupRecognition, updateState]);
 
-  const stopListening = React.useCallback(() => {
-    const current = currentStateRef.current;
-    if (current !== "listening" && current !== "requesting_permission") {
-      return;
-    }
-
-    isStoppingRef.current = true;
-    updateState("processing");
-
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (err) {
-        // Fallback to abort if stop fails
-        try {
-          recognitionRef.current.abort();
-        } catch {
-          // ignore
-        }
-      }
-    }
-
-    // Deliver whatever final text has been committed so far
-    const committed = accumulatedFinalRef.current.trim();
-    if (committed && callbacksRef.current.onTranscriptFinalized) {
-      callbacksRef.current.onTranscriptFinalized(committed);
-    }
-
-    setInterimTranscript("");
-    updateState("completed");
-
-    // After brief completion feedback, return state to idle
-    setTimeout(() => {
-      if (currentStateRef.current === "completed") {
-        updateState("idle");
-      }
-      isStoppingRef.current = false;
-    }, 600);
-  }, [updateState]);
-
-  const startListening = React.useCallback(() => {
-    const current = currentStateRef.current;
-    // Prevent duplicate sessions or starts while already listening or starting
-    if (isStartingRef.current || current === "listening" || current === "requesting_permission") {
-      return;
-    }
-
+  // Core factory to spawn and start speech recognition instance
+  const createAndStartInstance = React.useCallback((): boolean => {
     const SpeechRecognitionCtor = getSpeechRecognitionConstructor();
     if (!SpeechRecognitionCtor) {
       updateState("unsupported");
@@ -167,18 +133,8 @@ export function useSpeechRecognition({
       };
       setError(errDetails);
       callbacksRef.current.onError?.(errDetails);
-      return;
+      return false;
     }
-
-    // Clean any prior instance
-    cleanupRecognition();
-
-    isStartingRef.current = true;
-    updateState("requesting_permission");
-    setError(null);
-    setInterimTranscript("");
-    setFinalTranscript("");
-    accumulatedFinalRef.current = "";
 
     try {
       const recognition = new SpeechRecognitionCtor();
@@ -189,10 +145,12 @@ export function useSpeechRecognition({
 
       recognition.onstart = () => {
         isStartingRef.current = false;
+        networkRetryCountRef.current = 0;
         updateState("listening");
       };
 
       recognition.onresult = (event: any) => {
+        networkRetryCountRef.current = 0;
         let interimText = "";
         let newFinalText = "";
 
@@ -222,18 +180,36 @@ export function useSpeechRecognition({
           }
         }
 
+        interimTranscriptRef.current = interimText.trim();
         setInterimTranscript(interimText.trim());
       };
 
       recognition.onerror = (event: any) => {
         const rawErr = event?.error || "unknown";
-        // "aborted" often fires during clean manual stop/reset, don't flash error if stopping
-        if (rawErr === "aborted" && isStoppingRef.current) {
+
+        // "aborted" often fires during clean manual stop/reset or silence teardown
+        if (rawErr === "aborted" || isStoppingRef.current) {
+          return;
+        }
+
+        // "no-speech" happens routinely during normal pauses in speaking.
+        // In continuous recording, do NOT abort the session or display a jarring error.
+        if (rawErr === "no-speech") {
+          if (isListeningIntendedRef.current) {
+            // Keep listening state active; onend will smoothly reconnect
+            return;
+          }
+        }
+
+        // Transient network hiccups: allow retry if candidate is actively recording
+        if (rawErr === "network" && isListeningIntendedRef.current && networkRetryCountRef.current < 2) {
+          networkRetryCountRef.current++;
           return;
         }
 
         const normalized = normalizeSpeechError(rawErr);
         isStartingRef.current = false;
+        isListeningIntendedRef.current = false;
         setError(normalized);
         updateState("error");
         callbacksRef.current.onError?.(normalized);
@@ -241,15 +217,33 @@ export function useSpeechRecognition({
 
       recognition.onend = () => {
         isStartingRef.current = false;
-        const currentEndState = currentStateRef.current;
 
-        // If stopped cleanly, transition to completed then idle
+        // If candidate intentionally wants to keep listening (e.g. browser disconnected due to silence or timeout):
+        // Automatically reconnect to maintain uninterrupted listening experience!
+        if (isListeningIntendedRef.current && !isStoppingRef.current) {
+          if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+          restartTimerRef.current = setTimeout(() => {
+            if (isListeningIntendedRef.current && !isStoppingRef.current) {
+              try {
+                createAndStartInstance();
+              } catch {
+                // Safe ignore on restart race
+              }
+            }
+          }, 150);
+          return;
+        }
+
+        // Candidate stopped intentionally or recognition finished
+        const currentEndState = currentStateRef.current;
         if (currentEndState === "listening" || currentEndState === "processing" || isStoppingRef.current) {
-          const committed = accumulatedFinalRef.current.trim();
-          if (committed && callbacksRef.current.onTranscriptFinalized) {
-            callbacksRef.current.onTranscriptFinalized(committed);
+          // Commit any leftover unfinalized speech (e.g. user was mid-sentence when clicking Stop)
+          const pendingInterim = interimTranscriptRef.current.trim();
+          if (pendingInterim && callbacksRef.current.onTranscriptFinalized) {
+            callbacksRef.current.onTranscriptFinalized(pendingInterim);
           }
           setInterimTranscript("");
+          interimTranscriptRef.current = "";
           updateState("completed");
 
           setTimeout(() => {
@@ -265,14 +259,122 @@ export function useSpeechRecognition({
 
       recognitionRef.current = recognition;
       recognition.start();
+      return true;
     } catch (err: any) {
       isStartingRef.current = false;
+      isListeningIntendedRef.current = false;
       const normalized = normalizeSpeechError(err?.message || "unknown");
       setError(normalized);
       updateState("error");
       callbacksRef.current.onError?.(normalized);
+      return false;
     }
-  }, [continuous, interimResults, lang, cleanupRecognition, updateState]);
+  }, [continuous, interimResults, lang, updateState]);
+
+  const stopListening = React.useCallback(() => {
+    const current = currentStateRef.current;
+    if (current !== "listening" && current !== "requesting_permission") {
+      return;
+    }
+
+    isListeningIntendedRef.current = false;
+    isStoppingRef.current = true;
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
+    }
+    updateState("processing");
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        try {
+          recognitionRef.current.abort();
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    // Flush any pending interim speech as final text so candidate's last words are never lost
+    const pendingInterim = interimTranscriptRef.current.trim();
+    if (pendingInterim && callbacksRef.current.onTranscriptFinalized) {
+      callbacksRef.current.onTranscriptFinalized(pendingInterim);
+    }
+    setInterimTranscript("");
+    interimTranscriptRef.current = "";
+
+    updateState("completed");
+
+    setTimeout(() => {
+      if (currentStateRef.current === "completed") {
+        updateState("idle");
+      }
+      isStoppingRef.current = false;
+    }, 600);
+  }, [updateState]);
+
+  const startListening = React.useCallback(async () => {
+    const current = currentStateRef.current;
+    // Prevent duplicate sessions or starts while already listening or starting
+    if (isStartingRef.current || current === "listening" || current === "requesting_permission") {
+      return;
+    }
+
+    if (!isSpeechRecognitionSupported()) {
+      updateState("unsupported");
+      const errDetails: SpeechRecognitionErrorDetails = {
+        code: "service_not_allowed",
+        message: "Speech recognition is not supported in this browser.",
+        actionableHint: "Please use Google Chrome, Microsoft Edge, or Safari, or continue typing your answer directly.",
+      };
+      setError(errDetails);
+      callbacksRef.current.onError?.(errDetails);
+      return;
+    }
+
+    // Clean any prior instance
+    cleanupRecognition();
+
+    isStartingRef.current = true;
+    isListeningIntendedRef.current = true;
+    isStoppingRef.current = false;
+    updateState("requesting_permission");
+    setError(null);
+    setInterimTranscript("");
+    interimTranscriptRef.current = "";
+    setFinalTranscript("");
+    accumulatedFinalRef.current = "";
+
+    // Pre-request microphone permission in browser if available (essential for deployed HTTPS sites)
+    if (typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+      } catch (err: any) {
+        if (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError") {
+          isStartingRef.current = false;
+          isListeningIntendedRef.current = false;
+          const normalized = normalizeSpeechError("not-allowed");
+          setError(normalized);
+          updateState("error");
+          callbacksRef.current.onError?.(normalized);
+          return;
+        }
+        // Other errors (e.g. NotFoundError): continue to SpeechRecognition to get standard error
+      }
+    }
+
+    // If cancelled while permission was being requested
+    if (!isListeningIntendedRef.current) {
+      isStartingRef.current = false;
+      updateState("idle");
+      return;
+    }
+
+    createAndStartInstance();
+  }, [cleanupRecognition, createAndStartInstance, updateState]);
 
   return {
     isSupported,

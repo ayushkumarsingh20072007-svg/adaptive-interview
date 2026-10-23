@@ -94,16 +94,23 @@ export function VoiceInputControl({
               type="button"
               variant="outline"
               size="sm"
-              disabled={disabled || isRequesting || isProcessing}
+              disabled={disabled || isRequesting || isProcessing || !isSupported}
               onClick={startListening}
-              aria-label={isRequesting ? "Requesting microphone permission" : "Speak your answer using microphone"}
+              aria-label={!isSupported ? "Voice input requires Chrome, Edge, or Safari" : isRequesting ? "Requesting microphone permission" : "Speak your answer using microphone"}
               className={`gap-2 h-9 px-3.5 rounded-xl text-xs font-medium border transition-all ${
-                isCompleted
+                !isSupported
+                  ? "border-slate-800 bg-[#060a14] text-slate-500 cursor-not-allowed opacity-60"
+                  : isCompleted
                   ? "border-emerald-600/60 bg-emerald-950/30 text-emerald-300"
                   : "border-slate-700/80 bg-[#080e1c] text-slate-300 hover:text-white hover:border-indigo-500/60 hover:bg-indigo-950/30"
               }`}
             >
-              {isRequesting ? (
+              {!isSupported ? (
+                <>
+                  <MicOff className="h-3.5 w-3.5 text-slate-500" />
+                  <span>Voice Not Supported</span>
+                </>
+              ) : isRequesting ? (
                 <>
                   <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-400" />
                   <span>Requesting mic access…</span>

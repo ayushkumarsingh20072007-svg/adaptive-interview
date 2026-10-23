@@ -17,6 +17,7 @@ import {
   User,
   Briefcase,
   ShieldAlert,
+  UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +32,7 @@ function LoginFormContent() {
   const redirectParam = searchParams.get("redirect") || "/dashboard";
 
   const { user, refreshUser, logout } = useAuth();
+  const [forceShowLoginForm, setForceShowLoginForm] = React.useState(false);
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [showPassword, setShowPassword] = React.useState(false);
@@ -97,7 +99,7 @@ function LoginFormContent() {
     }
   };
 
-  if (user) {
+  if (user && !forceShowLoginForm) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-14rem)] py-8 px-4">
         <div className="w-full max-w-md space-y-6">
@@ -133,21 +135,34 @@ function LoginFormContent() {
                 </Button>
               </Link>
               <Button
+                type="button"
                 variant="outline"
                 onClick={async () => {
                   await logout();
+                  setForceShowLoginForm(true);
                 }}
-                className="w-full justify-center gap-2 text-rose-300 border-rose-900/50 hover:bg-rose-950/40 hover:text-white h-10"
+                className="w-full justify-center gap-2 text-indigo-300 border-indigo-800/60 hover:bg-indigo-950/50 hover:text-white h-10"
               >
-                <LogOut className="h-4 w-4 text-rose-400" />
+                <UserPlus className="h-4 w-4 text-indigo-400" />
+                Sign In as Different User
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  await logout();
+                }}
+                className="w-full justify-center gap-2 text-rose-300 hover:bg-rose-950/30 hover:text-rose-200 h-9 text-xs"
+              >
+                <LogOut className="h-3.5 w-3.5 text-rose-400" />
                 Log Out of Account
               </Button>
             </div>
 
-            <div className="pt-2 border-t border-[#1a2642]">
-              <p className="text-[11px] text-slate-500">
-                Want to sign in with different credentials? Click <strong>Log Out of Account</strong> above.
-              </p>
+            <div className="pt-2 border-t border-[#1a2642] flex items-center justify-between text-[11px] text-slate-400">
+              <span>Need a new account?</span>
+              <Link href="/signup" className="text-indigo-400 hover:text-indigo-300 font-medium underline underline-offset-2">
+                Create Account
+              </Link>
             </div>
           </Card>
         </div>
