@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import * as React from "react";
 import {
@@ -166,7 +166,7 @@ export function AiAssistantPanel({
             <p className="text-[10px] text-slate-500 mt-0.5">
               {isInterviewMode
                 ? "Topic awareness only — answers are not provided"
-                : "Full AI tutor — ask anything"}
+                : "Technical & CSE Interview Coach"}
             </p>
           </div>
         </div>
@@ -220,9 +220,9 @@ export function AiAssistantPanel({
                 ) : (
                   <>
                     <BrainCircuit className="h-6 w-6 text-indigo-500/60" />
-                    <p className="text-[11px] text-slate-500 max-w-[220px] leading-relaxed">
-                      Ask me anything about <strong className="text-slate-400">algorithms, system design, frameworks</strong>,
-                      or request a mock interview answer.
+                    <p className="text-[11px] text-slate-500 max-w-[240px] leading-relaxed">
+                      Ask me anything about <strong className="text-slate-400">algorithms, system design, CSE subjects</strong>,
+                      or request a technical mock interview answer.
                     </p>
                   </>
                 )}
@@ -288,8 +288,8 @@ export function AiAssistantPanel({
                 disabled={isLoading}
                 placeholder={
                   isInterviewMode
-                    ? "Ask about topic concepts, domain vocabulary..."
-                    : "Ask anything — concepts, code, mock answers..."
+                    ? "Ask about technical topic concepts, domain vocabulary..."
+                    : "Ask technical concepts, algorithms, CSE subjects, mock answers..."
                 }
                 className={`text-[12px] resize-none rounded-xl bg-[#070b14] border text-slate-200 placeholder:text-slate-500 focus-visible:ring-1 min-h-[52px] ${
                   isInterviewMode
@@ -317,8 +317,8 @@ export function AiAssistantPanel({
             </div>
             <p className="text-[10px] text-slate-600 mt-1.5">
               {isInterviewMode
-                ? "Enter to send • Shift+Enter for newline • Answers to active questions are blocked"
-                : "Enter to send • Shift+Enter for newline"}
+                ? "Enter to send • Shift+Enter for newline • Strictly technical topics only"
+                : "Enter to send • Shift+Enter for newline • Strictly technical & CSE subjects"}
             </p>
           </div>
         </>
